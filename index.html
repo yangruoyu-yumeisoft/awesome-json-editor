@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JSON在线编辑器</title>
+    <title>Awesome JSON Editor</title>
     <meta name="description" content="最强JSON在线编辑器，支持JSON格式化、JSON验证、JSON转SQL、JSON转Java对象">
     <meta name="keywords" content="JSON在线编辑器, JSON格式化, JSON验证, JSON转SQL, JSON转Java对象">
     <script src="tailwind3.js"></script>
@@ -53,8 +53,8 @@
             .mobile-stack { flex-direction: column !important; }
             .mobile-full { width: 100% !important; }
             .mobile-hidden { display: none !important; }
-            .mobile-header { padding: 0.5rem 1rem !important; }
-            .mobile-header h1 { font-size: 1rem !important; }
+            .mobile-header { padding: 0.5rem 0.75rem !important; }
+            .mobile-header h1 { font-size: 0.875rem !important; }
             .mobile-tabs { padding: 0 0.5rem !important; }
             .mobile-toolbar { 
                 position: relative !important; 
@@ -70,6 +70,11 @@
             }
             .mobile-tree { padding: 0.5rem !important; padding-top: 0.5rem !important; }
             .mobile-input { min-height: 150px !important; }
+            /* 语言切换器在移动端更小 */
+            .lang-switcher-mobile button {
+                padding: 0.25rem 0.5rem !important;
+                font-size: 0.7rem !important;
+            }
         }
     </style>
 </head>
@@ -83,13 +88,21 @@
                         <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z"/></svg>
                     </div>
                     <div>
-                        <h1 class="text-lg font-bold tracking-tight">JSON在线编辑器</h1>
-                        <p class="text-xs text-muted hidden sm:block">黑龙江省瑜美科技发展有限公司 出品</p>
+                        <h1 class="text-lg font-bold tracking-tight">{{ t.title }}</h1>
+                        <p class="text-xs text-muted hidden sm:block">{{ t.subtitle }}</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-2 bg-bg rounded-lg p-1">
-                    <button @click="viewMode = 'tree'" :class="['px-4 py-1.5 rounded-md text-sm font-medium transition-all', viewMode === 'tree' ? 'bg-accent text-bg shadow' : 'text-muted hover:text-fg']">树形结构</button>
-                    <button @click="viewMode = 'mindmap'" :class="['px-4 py-1.5 rounded-md text-sm font-medium transition-all', viewMode === 'mindmap' ? 'bg-accent text-bg shadow' : 'text-muted hover:text-fg']">脑图视图</button>
+                <div class="flex items-center gap-1 sm:gap-2">
+                    <!-- Language Switcher -->
+                    <div class="flex items-center gap-0.5 sm:gap-1 bg-bg rounded-lg p-0.5 sm:p-1 lang-switcher-mobile">
+                        <button @click="setLanguage('en')" :class="['px-1.5 sm:px-2 py-1 rounded text-[10px] sm:text-xs font-medium transition-all', currentLang === 'en' ? 'bg-accent text-bg shadow' : 'text-muted hover:text-fg']">EN</button>
+                        <button @click="setLanguage('zh')" :class="['px-1.5 sm:px-2 py-1 rounded text-[10px] sm:text-xs font-medium transition-all', currentLang === 'zh' ? 'bg-accent text-bg shadow' : 'text-muted hover:text-fg']">中</button>
+                    </div>
+                    <!-- View Mode Switcher -->
+                    <div class="flex items-center gap-0.5 sm:gap-1 bg-bg rounded-lg p-0.5 sm:p-1">
+                        <button @click="viewMode = 'tree'" :class="['px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-sm font-medium transition-all', viewMode === 'tree' ? 'bg-accent text-bg shadow' : 'text-muted hover:text-fg']">{{ t.treeView }}</button>
+                        <button @click="viewMode = 'mindmap'" :class="['px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-sm font-medium transition-all', viewMode === 'mindmap' ? 'bg-accent text-bg shadow' : 'text-muted hover:text-fg']">{{ t.mindMapView }}</button>
+                    </div>
                 </div>
             </div>
             <!-- 页签栏 -->
@@ -104,7 +117,7 @@
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                 </div>
-                <button @click="addTab" class="p-1.5 text-muted hover:text-accent hover:bg-bg-card/50 rounded-md transition-colors flex-shrink-0" title="新建页签">
+                <button @click="addTab" class="p-1.5 text-muted hover:text-accent hover:bg-bg-card/50 rounded-md transition-colors flex-shrink-0" :title="t.newTab">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                 </button>
             </div>
@@ -115,16 +128,16 @@
             <div :class="['w-full md:w-[480px] flex flex-col border-r-0 md:border-r border-b md:border-b-0 border-border bg-bg-card/50 flex-shrink-0 transition-all duration-300', isInputCollapsed ? 'h-10 md:h-auto' : 'h-[40vh] md:h-auto']">
                 <div class="p-2 md:p-4 border-b border-border flex-1 flex flex-col min-h-0" v-show="!isInputCollapsed || isDesktop">
                     <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs font-bold text-muted uppercase tracking-wider">JSON 输入</span>
+                        <span class="text-xs font-bold text-muted uppercase tracking-wider">{{ t.jsonInput }}</span>
                         <div class="flex gap-1">
-                            <button @click="undo" :disabled="!canUndo" :class="['px-2 py-1 text-xs rounded transition-colors', canUndo ? 'bg-bg hover:bg-border text-fg' : 'bg-bg/50 text-muted/50 cursor-not-allowed']" title="撤销 (Ctrl+Z)">
+                            <button @click="undo" :disabled="!canUndo" :class="['px-2 py-1 text-xs rounded transition-colors', canUndo ? 'bg-bg hover:bg-border text-fg' : 'bg-bg/50 text-muted/50 cursor-not-allowed']" :title="t.undo + ' (Ctrl+Z)'">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
                             </button>
-                            <button @click="redo" :disabled="!canRedo" :class="['px-2 py-1 text-xs rounded transition-colors', canRedo ? 'bg-bg hover:bg-border text-fg' : 'bg-bg/50 text-muted/50 cursor-not-allowed']" title="重做 (Ctrl+Y/Ctrl+Shift+Z)">
+                            <button @click="redo" :disabled="!canRedo" :class="['px-2 py-1 text-xs rounded transition-colors', canRedo ? 'bg-bg hover:bg-border text-fg' : 'bg-bg/50 text-muted/50 cursor-not-allowed']" :title="t.redo + ' (Ctrl+Y/Ctrl+Shift+Z)'">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6"/></svg>
                             </button>
-                            <button @click="formatJson" class="px-2 py-1 text-xs bg-bg hover:bg-border rounded transition-colors">格式化</button>
-                            <button @click="resetTree" class="px-2 py-1 text-xs bg-bg hover:bg-border rounded transition-colors">重置</button>
+                            <button @click="formatJson" class="px-2 py-1 text-xs bg-bg hover:bg-border rounded transition-colors">{{ t.format }}</button>
+                            <button @click="resetTree" class="px-2 py-1 text-xs bg-bg hover:bg-border rounded transition-colors">{{ t.reset }}</button>
                         </div>
                     </div>
                     <textarea v-model="jsonInput" @blur="parseInput" placeholder="在此粘贴 JSON..." class="flex-1 w-full min-h-[100px] md:min-h-[200px] bg-bg border border-border rounded-lg p-2 md:p-3 text-sm font-mono text-fg placeholder-muted/50 resize-none focus:outline-none focus:border-accent scrollbar-thin"></textarea>
@@ -133,7 +146,7 @@
                 <!-- 手机端收起/展开按钮 -->
                 <button @click="toggleInputCollapse" class="md:hidden w-full h-10 flex items-center justify-center gap-2 text-xs text-muted hover:text-fg bg-bg-card/80 border-b border-border transition-colors">
                     <svg :class="['w-4 h-4 transition-transform', isInputCollapsed ? 'rotate-180' : '']" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
-                    <span>{{ isInputCollapsed ? '展开 JSON 输入' : '收起 JSON 输入' }}</span>
+                    <span>{{ isInputCollapsed ? t.expandInput : t.collapseInput }}</span>
                 </button>
             </div>
             
@@ -145,32 +158,32 @@
                         @click="generateJava" 
                         :disabled="!canGenerateSchema"
                         :class="['px-2 md:px-3 py-1 md:py-1.5 text-xs font-medium border rounded-lg transition-colors', canGenerateSchema ? 'text-accent hover:text-fg bg-bg/80 backdrop-blur-sm border-border hover:border-accent cursor-pointer' : 'text-muted/50 bg-bg/50 border-border/50 cursor-not-allowed']"
-                        title="生成 Lombok Java 对象 (选中对象时可用)">
-                        Java对象
+                        :title="currentLang === 'zh' ? '生成 Lombok Java 对象 (选中对象时可用)' : 'Generate Lombok Java Object (select object first)'">
+                        {{ t.javaObject }}
                     </button>
                     <button 
                         @click="generateMySQL" 
                         :disabled="!canGenerateSchema"
                         :class="['px-2 md:px-3 py-1 md:py-1.5 text-xs font-medium border rounded-lg transition-colors', canGenerateSchema ? 'text-accent hover:text-fg bg-bg/80 backdrop-blur-sm border-border hover:border-accent cursor-pointer' : 'text-muted/50 bg-bg/50 border-border/50 cursor-not-allowed']"
-                        title="生成 MySQL 建表语句 (选中对象时可用)">
-                        MySQL建表
+                        :title="currentLang === 'zh' ? '生成 MySQL 建表语句 (选中对象时可用)' : 'Generate MySQL Schema (select object first)'">
+                        {{ t.mysqlSchema }}
                     </button>
                     <button 
                         @click="generateMySQLInsert" 
                         :disabled="!canGenerateCode"
                         :class="['px-2 md:px-3 py-1 md:py-1.5 text-xs font-medium border rounded-lg transition-colors', canGenerateCode ? 'text-accent hover:text-fg bg-bg/80 backdrop-blur-sm border-border hover:border-accent cursor-pointer' : 'text-muted/50 bg-bg/50 border-border/50 cursor-not-allowed']"
-                        title="生成 MySQL INSERT 语句 (选中对象或数组时可用)">
-                        MySQL-Insert
+                        :title="currentLang === 'zh' ? '生成 MySQL INSERT 语句 (选中对象或数组时可用)' : 'Generate MySQL INSERT (select object or array first)'">
+                        {{ t.mysqlInsert }}
                     </button>
                     <button 
                         @click="generateMySQLUpdate" 
                         :disabled="!canGenerateCode"
                         :class="['px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors', canGenerateCode ? 'text-accent hover:text-fg bg-bg/80 backdrop-blur-sm border-border hover:border-accent cursor-pointer' : 'text-muted/50 bg-bg/50 border-border/50 cursor-not-allowed']"
-                        title="生成 MySQL UPDATE 语句 (选中对象或数组时可用)">
-                        MySQL-Update
+                        :title="currentLang === 'zh' ? '生成 MySQL UPDATE 语句 (选中对象或数组时可用)' : 'Generate MySQL UPDATE (select object or array first)'">
+                        {{ t.mysqlUpdate }}
                     </button>
                     <button @click="showHelp = true" class="hidden md:block px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors text-accent hover:text-fg bg-bg/80 backdrop-blur-sm border-border hover:border-accent cursor-pointer">
-                        快捷键帮助 (?)
+                        {{ t.shortcuts }}
                     </button>
                 </div>
 
@@ -178,7 +191,7 @@
                 <div class="flex-1 overflow-auto p-4 md:p-8 pt-4 md:pt-16 scrollbar-thin" tabindex="0" ref="treeContainer">
                     <div v-if="!treeData || (typeof treeData !== 'object' && treeData !== null)" class="h-full flex flex-col items-center justify-center text-muted">
                         <svg class="w-16 h-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                        <p>无数据，请粘贴 JSON</p>
+                        <p>{{ t.noData }}</p>
                     </div>
 
                     <div v-else-if="viewMode === 'tree'" class="min-w-max select-none outline-none">
@@ -189,6 +202,7 @@
                             :selected-path="selectedPath"
                             :editing-state="editingState"
                             :expanded-paths="expandedPaths"
+                            :current-lang="currentLang"
                             @select="selectNode"
                             @update:value="handleValueUpdate"
                             @update:key="handleKeyUpdate"
@@ -208,7 +222,7 @@
         
         <!-- 手机端底部版权信息 -->
         <footer class="md:hidden bg-bg-card border-t border-border px-4 py-2 text-center text-xs text-muted flex-shrink-0">
-            <p>© 黑龙江省瑜美科技发展有限公司</p>
+            <p>© {{ t.subtitle }}</p>
         </footer>
         
         <transition name="fade">
@@ -223,7 +237,7 @@
             <div v-if="showHelp" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center" @click="showHelp = false">
                 <div class="bg-bg-card border border-border rounded-xl shadow-2xl p-6 max-w-md w-full mx-4" @click.stop>
                     <div class="flex items-center justify-between mb-4">
-                        <h3 class="text-lg font-bold text-fg">快捷键帮助</h3>
+                        <h3 class="text-lg font-bold text-fg">{{ t.shortcutsTitle }}</h3>
                         <button @click="showHelp = false" class="text-muted hover:text-fg">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
@@ -231,45 +245,45 @@
                     <div class="space-y-3 text-sm">
                         <div class="grid grid-cols-2 gap-2">
                             <span class="text-muted font-mono">↑ / ↓</span>
-                            <span class="text-fg">上下导航节点</span>
+                            <span class="text-fg">{{ t.navUpDown }}</span>
                             <span class="text-muted font-mono">← / →</span>
-                            <span class="text-fg">展开/收缩节点</span>
+                            <span class="text-fg">{{ t.expandCollapse }}</span>
                             <span class="text-muted font-mono">Enter</span>
-                            <span class="text-fg">添加子节点/下方插入</span>
+                            <span class="text-fg">{{ t.addChild }}</span>
                             <span class="text-muted font-mono">Shift+Enter</span>
-                            <span class="text-fg">在上方插入</span>
+                            <span class="text-fg">{{ t.insertAbove }}</span>
                             <span class="text-muted font-mono">Tab</span>
-                            <span class="text-fg">在下方插入</span>
+                            <span class="text-fg">{{ t.insertBelow }}</span>
                             <span class="text-muted font-mono">F2</span>
-                            <span class="text-fg">编辑键名/值</span>
+                            <span class="text-fg">{{ t.editKeyValue }}</span>
                             <span class="text-muted font-mono">[ / ]</span>
-                            <span class="text-fg">切换类型</span>
+                            <span class="text-fg">{{ t.switchType }}</span>
                             <span class="text-muted font-mono">Ctrl+[ / Ctrl+]</span>
-                            <span class="text-fg">向上/向下移动</span>
+                            <span class="text-fg">{{ t.moveNode }}</span>
                             <span class="text-muted font-mono">Delete</span>
-                            <span class="text-fg">删除节点</span>
+                            <span class="text-fg">{{ t.deleteNode }}</span>
                             <span class="text-muted font-mono">Ctrl+C</span>
-                            <span class="text-fg">复制节点</span>
+                            <span class="text-fg">{{ currentLang === 'zh' ? '复制节点' : 'Copy node' }}</span>
                             <span class="text-muted font-mono">Ctrl+Alt+C</span>
-                            <span class="text-fg">复制 XPath</span>
+                            <span class="text-fg">{{ currentLang === 'zh' ? '复制 XPath' : 'Copy XPath' }}</span>
                             <span class="text-muted font-mono">Ctrl+V</span>
-                            <span class="text-fg">粘贴节点</span>
+                            <span class="text-fg">{{ currentLang === 'zh' ? '粘贴节点' : 'Paste node' }}</span>
                             <span class="text-muted font-mono">Ctrl+Z</span>
-                            <span class="text-fg">撤销</span>
+                            <span class="text-fg">{{ t.undo }}</span>
                             <span class="text-muted font-mono">Ctrl+Y / Ctrl+Shift+Z</span>
-                            <span class="text-fg">重做</span>
+                            <span class="text-fg">{{ t.redo }}</span>
                             <span class="text-muted font-mono">Insert</span>
-                            <span class="text-fg">下方插入</span>
+                            <span class="text-fg">{{ currentLang === 'zh' ? '下方插入' : 'Insert below' }}</span>
                             <span class="text-muted font-mono">Home</span>
-                            <span class="text-fg">跳转到第一个</span>
+                            <span class="text-fg">{{ currentLang === 'zh' ? '跳转到第一个' : 'Go to first' }}</span>
                             <span class="text-muted font-mono">End</span>
-                            <span class="text-fg">跳转到最后一个</span>
+                            <span class="text-fg">{{ currentLang === 'zh' ? '跳转到最后一个' : 'Go to last' }}</span>
                             <span class="text-muted font-mono">PageUp</span>
-                            <span class="text-fg">向上翻页</span>
+                            <span class="text-fg">{{ currentLang === 'zh' ? '向上翻页' : 'Page up' }}</span>
                             <span class="text-muted font-mono">PageDown</span>
-                            <span class="text-fg">向下翻页</span>
+                            <span class="text-fg">{{ currentLang === 'zh' ? '向下翻页' : 'Page down' }}</span>
                             <span class="text-muted font-mono">? / ？</span>
-                            <span class="text-fg">显示/隐藏帮助</span>
+                            <span class="text-fg">{{ currentLang === 'zh' ? '显示/隐藏帮助' : 'Toggle help' }}</span>
                         </div>
                         <div class="mt-4 pt-4 border-t border-border text-xs text-muted">
                             <p>提示：输入 [] 自动转为数组，{} 转为对象，null 转为空值</p>
@@ -283,7 +297,112 @@
     <script>
         const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, toRaw } = Vue;
         
+        // i18n translations
+        const i18n = {
+            en: {
+                title: 'Awesome JSON Editor',
+                subtitle: 'Powered by Heilongjiang Yumei Technology',
+                treeView: 'Tree',
+                mindMapView: 'Mind Map',
+                newTab: 'New Tab',
+                closeTab: 'Close Tab',
+                renameTab: 'Rename',
+                jsonInput: 'JSON Input',
+                format: 'Format',
+                reset: 'Reset',
+                undo: 'Undo',
+                redo: 'Redo',
+                expandInput: 'Expand Input',
+                collapseInput: 'Collapse Input',
+                javaObject: 'Java',
+                mysqlSchema: 'MySQL',
+                mysqlInsert: 'MySQL-Insert',
+                mysqlUpdate: 'MySQL-Update',
+                shortcuts: 'Shortcuts (?)',
+                noData: 'No data, please paste JSON',
+                toastNewTab: 'New tab created',
+                toastMinTabs: 'Keep at least one tab',
+                toastTabRenamed: 'Tab renamed',
+                toastFormatted: 'Formatted',
+                toastReset: 'Reset completed',
+                toastCopied: 'Copied',
+                toastPasted: 'Pasted',
+                toastDeleted: 'Deleted',
+                toastKeyExists: 'Key already exists',
+                toastPasteFailed: 'Paste failed',
+                toastDataRestored: 'tabs restored',
+                toastDataMigrated: 'Data migrated',
+                shortcutsTitle: 'Keyboard Shortcuts',
+                navUpDown: 'Navigate up/down',
+                expandCollapse: 'Expand/collapse',
+                addChild: 'Add child/insert below',
+                insertAbove: 'Insert above',
+                insertBelow: 'Insert below',
+                editKeyValue: 'Edit key/value',
+                switchType: 'Switch type',
+                moveNode: 'Move node up/down',
+                deleteNode: 'Delete node',
+                typeString: 'string',
+                typeNumber: 'number',
+                typeBoolean: 'boolean',
+                typeNull: 'null',
+                typeObject: 'object',
+                typeArray: 'array'
+            },
+            zh: {
+                title: 'Awesome JSON Editor',
+                subtitle: 'Powered by Heilongjiang Yumei Technology Co., Ltd.',
+                treeView: '树形结构',
+                mindMapView: '脑图视图',
+                newTab: '新建页签',
+                closeTab: '关闭页签',
+                renameTab: '重命名',
+                jsonInput: 'JSON 输入',
+                format: '格式化',
+                reset: '重置',
+                undo: '撤销',
+                redo: '重做',
+                expandInput: '展开 JSON 输入',
+                collapseInput: '收起 JSON 输入',
+                javaObject: 'Java对象',
+                mysqlSchema: 'MySQL建表',
+                mysqlInsert: 'MySQL-Insert',
+                mysqlUpdate: 'MySQL-Update',
+                shortcuts: '快捷键帮助 (?)',
+                noData: '无数据，请粘贴 JSON',
+                toastNewTab: '新建页签',
+                toastMinTabs: '至少保留一个页签',
+                toastTabRenamed: '页签已重命名',
+                toastFormatted: '已格式化',
+                toastReset: '已重置',
+                toastCopied: '已复制',
+                toastPasted: '已粘贴',
+                toastDeleted: '已删除',
+                toastKeyExists: '键名已存在，请使用其他名称',
+                toastPasteFailed: '粘贴失败',
+                toastDataRestored: '个页签已恢复',
+                toastDataMigrated: '已迁移旧数据到新格式',
+                shortcutsTitle: '快捷键帮助',
+                navUpDown: '上下导航节点',
+                expandCollapse: '展开/收缩节点',
+                addChild: '添加子节点/下方插入',
+                insertAbove: '在上方插入',
+                insertBelow: '在下方插入',
+                editKeyValue: '编辑键名/值',
+                switchType: '切换类型',
+                moveNode: '向上/向下移动节点',
+                deleteNode: '删除节点',
+                typeString: '文本',
+                typeNumber: '数字',
+                typeBoolean: '布尔',
+                typeNull: '空',
+                typeObject: '对象',
+                typeArray: '数组'
+            }
+        };
+        
         const TYPE_MAP = { 'string': '文本', 'number': '数字', 'boolean': '布尔', 'null': '空', 'object': '对象', 'array': '数组' };
+        const TYPE_MAP_EN = { 'string': 'string', 'number': 'number', 'boolean': 'boolean', 'null': 'null', 'object': 'object', 'array': 'array' };
         const TYPE_KEYS = ['string', 'number', 'boolean', 'null', 'object', 'array'];
         const TYPE_BG_COLORS = {
             string: 'bg-yellow-500/20 border-yellow-600/30', number: 'bg-purple-500/20 border-purple-500/30',
@@ -293,7 +412,7 @@
 
         const JsonNode = {
             name: 'JsonNode',
-            props: ['data', 'path', 'isRoot', 'selectedPath', 'editingState', 'expandedPaths'],
+            props: ['data', 'path', 'isRoot', 'selectedPath', 'editingState', 'expandedPaths', 'currentLang'],
             emits: ['select', 'update:value', 'update:key', 'add-child', 'delete', 'toggle', 'start-edit', 'stop-edit'],
             setup(props, { emit }) {
                 const editInput = ref(null);
@@ -417,7 +536,7 @@
                 };
 
                 return { 
-                    isExpanded, getType, isSelected, isObject, isArray, isIterable, entries, TYPE_MAP, TYPE_BG_COLORS,
+                    isExpanded, getType, isSelected, isObject, isArray, isIterable, entries, TYPE_MAP, TYPE_KEYS, TYPE_BG_COLORS,
                     toggle, onSelect, changeType, startEditKey, startEditValue, finishEdit, editInput,
                     isEditingKey, isEditingValue, handleInputKeydown
                 };
@@ -433,11 +552,11 @@
                         <select :value="getType(data)" @change="changeType($event.target.value)" @click.stop :class="['text-[10px] font-bold px-1.5 py-0.5 rounded border cursor-pointer outline-none bg-bg text-fg appearance-none', TYPE_BG_COLORS[getType(data)] || 'bg-muted/20 border-muted']" style="background-image: none;">
                             <!-- 根节点只显示对象和数组 -->
                             <template v-if="isRoot">
-                                <option value="object" class="bg-bg text-fg">对象</option>
-                                <option value="array" class="bg-bg text-fg">数组</option>
+                                <option value="object" class="bg-bg text-fg">{{ currentLang === 'en' ? 'object' : '对象' }}</option>
+                                <option value="array" class="bg-bg text-fg">{{ currentLang === 'en' ? 'array' : '数组' }}</option>
                             </template>
                             <template v-else>
-                                <option v-for="(label, key) in TYPE_MAP" :key="key" :value="key" class="bg-bg text-fg">{{ label }}</option>
+                                <option v-for="key in TYPE_KEYS" :key="key" :value="key" class="bg-bg text-fg">{{ currentLang === 'en' ? key : TYPE_MAP[key] }}</option>
                             </template>
                         </select>
 
@@ -469,7 +588,7 @@
 
                     <transition name="slide">
                         <div v-if="isIterable && isExpanded" class="ml-3 tree-line">
-                            <json-node v-for="(entry, i) in entries" :key="entry.key + '-' + i" :data="entry.val" :path="[...path, entry.key]" :selected-path="selectedPath" :editing-state="editingState" :expanded-paths="expandedPaths"
+                            <json-node v-for="(entry, i) in entries" :key="entry.key + '-' + i" :data="entry.val" :path="[...path, entry.key]" :selected-path="selectedPath" :editing-state="editingState" :expanded-paths="expandedPaths" :current-lang="currentLang"
                                 @select="(p) => $emit('select', p)" @update:value="(e) => $emit('update:value', e)" @update:key="(e) => $emit('update:key', e)"
                                 @add-child="(p, isArr, fromTab) => $emit('add-child', p, isArr, fromTab)" @delete="(p) => $emit('delete', p)"
                                 @start-edit="(s) => $emit('start-edit', s)" @stop-edit="() => $emit('stop-edit')" @toggle="(p) => $emit('toggle', p)" />
@@ -514,6 +633,26 @@
         createApp({
             components: { JsonNode, MindMapNode },
             setup() {
+                // 语言设置
+                const LANG_STORAGE_KEY = 'json_editor_language';
+                const currentLang = ref(localStorage.getItem(LANG_STORAGE_KEY) || 'en');
+                
+                // 计算当前翻译
+                const t = computed(() => i18n[currentLang.value] || i18n.en);
+                
+                // 获取当前类型映射
+                const getTypeMap = computed(() => currentLang.value === 'en' ? TYPE_MAP_EN : TYPE_MAP);
+                
+                // 切换语言
+                const setLanguage = (lang) => {
+                    if (lang !== currentLang.value) {
+                        currentLang.value = lang;
+                        localStorage.setItem(LANG_STORAGE_KEY, lang);
+                        // 更新页面语言
+                        document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+                    }
+                };
+                
                 // 页签管理
                 const tabs = ref([]);
                 const activeTabIndex = ref(0);
@@ -558,8 +697,12 @@
                 
                 // 创建新页签
                 const createTab = (name = null, content = null) => {
-                    const defaultContent = '{\n  "项目名称": "JSON可视化工具",\n  "版本": 1.0,\n  "功能": [\n    "树形结构",\n    "脑图视图",\n    "代码生成"\n  ],\n  "配置": {\n    "主题": "dark",\n    "自动保存": true\n  }\n}';
-                    const tabName = name || '页签 ' + (tabs.value.length + 1);
+                    const isZh = currentLang.value === 'zh';
+                    const defaultContent = isZh 
+                        ? '{\n  "项目名称": "JSON可视化工具",\n  "版本": 1.0,\n  "功能": [\n    "树形结构",\n    "脑图视图",\n    "代码生成"\n  ],\n  "配置": {\n    "主题": "dark",\n    "自动保存": true\n  }\n}'
+                        : '{\n  "projectName": "JSON Visual Editor",\n  "version": 1.0,\n  "features": [\n    "Tree View",\n    "Mind Map",\n    "Code Generation"\n  ],\n  "config": {\n    "theme": "dark",\n    "autoSave": true\n  }\n}';
+                    const defaultTabName = isZh ? '页签 ' : 'Tab ';
+                    const tabName = name || defaultTabName + (tabs.value.length + 1);
                     return {
                         id: generateTabId(),
                         name: tabName,
@@ -582,13 +725,13 @@
                     activeTabIndex.value = tabs.value.length - 1;
                     loadTabData();
                     saveToStorage();
-                    showToast('新建页签');
+                    showToast(t.value.toastNewTab);
                 };
                 
                 // 关闭页签
                 const closeTab = (index) => {
                     if (tabs.value.length <= 1) {
-                        showToast('至少保留一个页签');
+                        showToast(t.value.toastMinTabs);
                         return;
                     }
                     tabs.value.splice(index, 1);
@@ -775,14 +918,14 @@
                     }
                     
                     if (fields.length === 0) {
-                        showToast('没有可生成的字段');
+                        showToast(currentLang.value === 'zh' ? '没有可生成的字段' : 'No fields to generate');
                         return;
                     }
                     
                     const sql = 'CREATE TABLE `' + tableName + '` (\n' + fields.join(',\n') + '\n);';
                     
                     navigator.clipboard.writeText(sql).then(() => {
-                        showToast('MySQL 建表语句已复制');
+                        showToast(currentLang.value === 'zh' ? 'MySQL 建表语句已复制' : 'MySQL schema copied');
                     });
                 };
                 
@@ -839,13 +982,13 @@
                     }
                     
                     if (statements.length === 0) {
-                        showToast('没有可生成的数据');
+                        showToast(currentLang.value === 'zh' ? '没有可生成的数据' : 'No data to generate');
                         return;
                     }
                     
                     const result = statements.join('\n');
                     navigator.clipboard.writeText(result).then(() => {
-                        showToast('MySQL INSERT 语句已复制 (' + statements.length + ' 条)');
+                        showToast((currentLang.value === 'zh' ? 'MySQL INSERT 语句已复制 (' : 'MySQL INSERT copied (') + statements.length + (currentLang.value === 'zh' ? ' 条)' : ' rows)'));
                     });
                 };
                 
@@ -905,13 +1048,13 @@
                     }
                     
                     if (statements.length === 0) {
-                        showToast('没有可生成的数据');
+                        showToast(currentLang.value === 'zh' ? '没有可生成的数据' : 'No data to generate');
                         return;
                     }
                     
                     const result = statements.join('\n');
                     navigator.clipboard.writeText(result).then(() => {
-                        showToast('MySQL UPDATE 语句已复制 (' + statements.length + ' 条)');
+                        showToast((currentLang.value === 'zh' ? 'MySQL UPDATE 语句已复制 (' : 'MySQL UPDATE copied (') + statements.length + (currentLang.value === 'zh' ? ' 条)' : ' rows)'));
                     });
                 };
                 
@@ -938,14 +1081,14 @@
                     }
                     
                     if (fields.length === 0) {
-                        showToast('没有可生成的字段');
+                        showToast(currentLang.value === 'zh' ? '没有可生成的字段' : 'No fields to generate');
                         return;
                     }
                     
                     const javaCode = 'import lombok.Data;\n\n@Data\npublic class ' + className + ' {\n' + fields.join('\n\n') + '\n}';
                     
                     navigator.clipboard.writeText(javaCode).then(() => {
-                        showToast('Java 对象代码已复制');
+                        showToast(currentLang.value === 'zh' ? 'Java 对象代码已复制' : 'Java code copied');
                     });
                 };
                 
@@ -982,7 +1125,7 @@
                         historyIndex.value--;
                         treeData.value = JSON.parse(history.value[historyIndex.value]);
                         syncTreeToInput();
-                        showToast('已撤销');
+                        showToast(t.value.toastUndo || t.value.undo);
                     }
                 };
                 
@@ -992,7 +1135,7 @@
                         historyIndex.value++;
                         treeData.value = JSON.parse(history.value[historyIndex.value]);
                         syncTreeToInput();
-                        showToast('已重做');
+                        showToast(t.value.toastRedo || t.value.redo);
                     }
                 };
                 
@@ -1020,7 +1163,7 @@
                     expandedPaths.add('root'); 
                     saveToHistory(); 
                     saveToStorage();
-                    showToast('已重置并清空本地保存');
+                        showToast(currentLang.value === 'zh' ? '已重置并清空本地保存' : 'Reset and cleared local storage');
                 };
                 const showToast = (msg) => { toast.value = msg; setTimeout(() => toast.value = '', 2000); };
 
@@ -1127,7 +1270,7 @@
                     const newPath = [...path.slice(0, -1), newKey];
                     selectedPath.value = newPath;
                     syncTreeToInput();
-                    showToast('键名已修改');
+                    showToast(currentLang.value === 'zh' ? '键名已修改' : 'Key name updated');
                     stopEdit();
                 };
 
@@ -1191,7 +1334,7 @@
                     }
                     
                     syncTreeToInput();
-                    showToast('已删除');
+                    showToast(t.value.toastDeleted);
                 };
 
                 const handleNavigation = (direction) => {
@@ -1731,7 +1874,7 @@
                     if (newKey && newKey !== oldKey) {
                         const { parent } = getRefByPath(path);
                         if (parent.hasOwnProperty(newKey)) {
-                            showToast('键名已存在，请使用其他名称');
+                            showToast(t.value.toastKeyExists);
                             return;
                         }
                         
@@ -1842,10 +1985,14 @@
                 }, { deep: true, debounce: 500 });
 
                 onMounted(() => {
+                    // 初始化语言
+                    document.documentElement.lang = currentLang.value === 'zh' ? 'zh-CN' : 'en';
+                    
                     // 先尝试从 localStorage 加载
                     if (!loadFromStorage()) {
                         // 没有保存的数据，创建默认页签
-                        const defaultTab = createTab('页签 1');
+                        const defaultTabName = currentLang.value === 'zh' ? '页签 1' : 'Tab 1';
+                        const defaultTab = createTab(defaultTabName);
                         tabs.value = [defaultTab];
                         activeTabIndex.value = 0;
                         loadTabData();
@@ -1859,6 +2006,8 @@
                 });
 
                 return {
+                    // 语言相关
+                    currentLang, t, setLanguage,
                     // 页签相关
                     tabs, activeTabIndex, currentTab,
                     addTab, closeTab, switchTab, startRenameTab, finishRenameTab, cancelRenameTab,
