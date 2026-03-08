@@ -1,0 +1,1878 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON在线编辑器</title>
+    <meta name="description" content="最强JSON在线编辑器，支持JSON格式化、JSON验证、JSON转SQL、JSON转Java对象">
+    <meta name="keywords" content="JSON在线编辑器, JSON格式化, JSON验证, JSON转SQL, JSON转Java对象">
+    <script src="tailwind3.js"></script>
+    <script src="vue3.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bg: '#0f172a', 'bg-card': '#1e293b', 'bg-hover': '#334155', border: '#334155',
+                        fg: '#f1f5f9', muted: '#94a3b8', accent: '#38bdf8', 'accent-dim': '#0ea5e9',
+                        key: '#a5f3fc', string: '#fcd34d', number: '#c4b5fd', boolean: '#fb7185', null: '#94a3b8',
+                    },
+                    fontFamily: { mono: ['JetBrains Mono', 'monospace'], sans: ['Noto Sans SC', 'sans-serif'], }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Noto Sans SC', sans-serif; background: #0f172a; color: #f1f5f9; }
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        .tree-line { border-left: 1px dashed #475569; margin-left: 10px; }
+        
+        .inline-edit-input {
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid #38bdf8;
+            border-radius: 4px;
+            padding: 0 4px;
+            outline: none;
+            color: #f1f5f9;
+            font-family: 'JetBrains Mono', monospace;
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.3);
+            min-width: 30px;
+            height: auto;
+        }
+        
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        .slide-enter-active, .slide-leave-active { transition: all 0.2s ease; }
+        .slide-enter-from, .slide-leave-to { opacity: 0; transform: translateY(-4px); }
+        
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .mobile-stack { flex-direction: column !important; }
+            .mobile-full { width: 100% !important; }
+            .mobile-hidden { display: none !important; }
+            .mobile-header { padding: 0.5rem 1rem !important; }
+            .mobile-header h1 { font-size: 1rem !important; }
+            .mobile-tabs { padding: 0 0.5rem !important; }
+            .mobile-toolbar { 
+                position: relative !important; 
+                top: 0 !important; 
+                left: 0 !important; 
+                padding: 0.5rem !important;
+                flex-wrap: wrap !important;
+                gap: 0.25rem !important;
+            }
+            .mobile-toolbar button {
+                padding: 0.25rem 0.5rem !important;
+                font-size: 0.75rem !important;
+            }
+            .mobile-tree { padding: 0.5rem !important; padding-top: 0.5rem !important; }
+            .mobile-input { min-height: 150px !important; }
+        }
+    </style>
+</head>
+<body class="h-screen overflow-hidden">
+    <div id="app" class="h-screen flex flex-col">
+        <header class="bg-bg-card border-b border-border z-50 shadow-lg flex-shrink-0">
+            <!-- 顶部标题栏 -->
+            <div class="px-6 py-3 flex items-center justify-between mobile-header">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-accent to-blue-600 flex items-center justify-center shadow">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z"/></svg>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold tracking-tight">JSON在线编辑器</h1>
+                        <p class="text-xs text-muted hidden sm:block">黑龙江省瑜美科技发展有限公司 出品</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 bg-bg rounded-lg p-1">
+                    <button @click="viewMode = 'tree'" :class="['px-4 py-1.5 rounded-md text-sm font-medium transition-all', viewMode === 'tree' ? 'bg-accent text-bg shadow' : 'text-muted hover:text-fg']">树形结构</button>
+                    <button @click="viewMode = 'mindmap'" :class="['px-4 py-1.5 rounded-md text-sm font-medium transition-all', viewMode === 'mindmap' ? 'bg-accent text-bg shadow' : 'text-muted hover:text-fg']">脑图视图</button>
+                </div>
+            </div>
+            <!-- 页签栏 -->
+            <div class="flex items-center px-4 overflow-x-auto scrollbar-thin mobile-tabs">
+                <div v-for="(tab, index) in tabs" :key="tab.id" 
+                     @click="switchTab(index)"
+                     :class="['group flex items-center gap-2 px-3 py-1.5 text-sm rounded-t-md cursor-pointer transition-all min-w-[80px] max-w-[150px] sm:min-w-[100px] sm:max-w-[200px]', 
+                              activeTabIndex === index ? 'bg-bg text-accent border-t-2 border-accent' : 'bg-bg-card/50 text-muted hover:text-fg hover:bg-bg-card']">
+                    <span v-if="!tab.isEditing" @dblclick.stop="startRenameTab(index)" class="truncate flex-1">{{ tab.name }}</span>
+                    <input v-else v-model="tab.editName" @blur="finishRenameTab(index)" @keydown.enter="finishRenameTab(index)" @keydown.esc="cancelRenameTab(index)" class="tab-edit-input bg-bg border border-accent rounded px-1 text-xs w-full outline-none" />
+                    <button @click.stop="closeTab(index)" v-if="tabs.length > 1" class="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity p-0.5 flex-shrink-0">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <button @click="addTab" class="p-1.5 text-muted hover:text-accent hover:bg-bg-card/50 rounded-md transition-colors flex-shrink-0" title="新建页签">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                </button>
+            </div>
+        </header>
+        
+        <main class="flex-1 flex overflow-hidden flex-col md:flex-row relative">
+            <!-- JSON 输入区 -->
+            <div :class="['w-full md:w-[480px] flex flex-col border-r-0 md:border-r border-b md:border-b-0 border-border bg-bg-card/50 flex-shrink-0 transition-all duration-300', isInputCollapsed ? 'h-10 md:h-auto' : 'h-[40vh] md:h-auto']">
+                <div class="p-2 md:p-4 border-b border-border flex-1 flex flex-col min-h-0" v-show="!isInputCollapsed || isDesktop">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-bold text-muted uppercase tracking-wider">JSON 输入</span>
+                        <div class="flex gap-1">
+                            <button @click="undo" :disabled="!canUndo" :class="['px-2 py-1 text-xs rounded transition-colors', canUndo ? 'bg-bg hover:bg-border text-fg' : 'bg-bg/50 text-muted/50 cursor-not-allowed']" title="撤销 (Ctrl+Z)">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+                            </button>
+                            <button @click="redo" :disabled="!canRedo" :class="['px-2 py-1 text-xs rounded transition-colors', canRedo ? 'bg-bg hover:bg-border text-fg' : 'bg-bg/50 text-muted/50 cursor-not-allowed']" title="重做 (Ctrl+Y/Ctrl+Shift+Z)">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6"/></svg>
+                            </button>
+                            <button @click="formatJson" class="px-2 py-1 text-xs bg-bg hover:bg-border rounded transition-colors">格式化</button>
+                            <button @click="resetTree" class="px-2 py-1 text-xs bg-bg hover:bg-border rounded transition-colors">重置</button>
+                        </div>
+                    </div>
+                    <textarea v-model="jsonInput" @blur="parseInput" placeholder="在此粘贴 JSON..." class="flex-1 w-full min-h-[100px] md:min-h-[200px] bg-bg border border-border rounded-lg p-2 md:p-3 text-sm font-mono text-fg placeholder-muted/50 resize-none focus:outline-none focus:border-accent scrollbar-thin"></textarea>
+                    <p v-if="error" class="text-red-400 text-xs mt-1">{{ error }}</p>
+                </div>
+                <!-- 手机端收起/展开按钮 -->
+                <button @click="toggleInputCollapse" class="md:hidden w-full h-10 flex items-center justify-center gap-2 text-xs text-muted hover:text-fg bg-bg-card/80 border-b border-border transition-colors">
+                    <svg :class="['w-4 h-4 transition-transform', isInputCollapsed ? 'rotate-180' : '']" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+                    <span>{{ isInputCollapsed ? '展开 JSON 输入' : '收起 JSON 输入' }}</span>
+                </button>
+            </div>
+            
+            <!-- 树形展示区 -->
+            <div class="flex-1 flex flex-col overflow-hidden relative" @click="handleGlobalClick">
+                <!-- 工具栏 -->
+                <div class="relative md:absolute top-0 left-0 md:top-4 md:left-4 z-20 flex flex-wrap items-center gap-1 md:gap-2 p-2 md:p-0 bg-bg-card/80 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none">
+                    <button 
+                        @click="generateJava" 
+                        :disabled="!canGenerateSchema"
+                        :class="['px-2 md:px-3 py-1 md:py-1.5 text-xs font-medium border rounded-lg transition-colors', canGenerateSchema ? 'text-accent hover:text-fg bg-bg/80 backdrop-blur-sm border-border hover:border-accent cursor-pointer' : 'text-muted/50 bg-bg/50 border-border/50 cursor-not-allowed']"
+                        title="生成 Lombok Java 对象 (选中对象时可用)">
+                        Java对象
+                    </button>
+                    <button 
+                        @click="generateMySQL" 
+                        :disabled="!canGenerateSchema"
+                        :class="['px-2 md:px-3 py-1 md:py-1.5 text-xs font-medium border rounded-lg transition-colors', canGenerateSchema ? 'text-accent hover:text-fg bg-bg/80 backdrop-blur-sm border-border hover:border-accent cursor-pointer' : 'text-muted/50 bg-bg/50 border-border/50 cursor-not-allowed']"
+                        title="生成 MySQL 建表语句 (选中对象时可用)">
+                        MySQL建表
+                    </button>
+                    <button 
+                        @click="generateMySQLInsert" 
+                        :disabled="!canGenerateCode"
+                        :class="['px-2 md:px-3 py-1 md:py-1.5 text-xs font-medium border rounded-lg transition-colors', canGenerateCode ? 'text-accent hover:text-fg bg-bg/80 backdrop-blur-sm border-border hover:border-accent cursor-pointer' : 'text-muted/50 bg-bg/50 border-border/50 cursor-not-allowed']"
+                        title="生成 MySQL INSERT 语句 (选中对象或数组时可用)">
+                        MySQL-Insert
+                    </button>
+                    <button 
+                        @click="generateMySQLUpdate" 
+                        :disabled="!canGenerateCode"
+                        :class="['px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors', canGenerateCode ? 'text-accent hover:text-fg bg-bg/80 backdrop-blur-sm border-border hover:border-accent cursor-pointer' : 'text-muted/50 bg-bg/50 border-border/50 cursor-not-allowed']"
+                        title="生成 MySQL UPDATE 语句 (选中对象或数组时可用)">
+                        MySQL-Update
+                    </button>
+                    <button @click="showHelp = true" class="hidden md:block px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors text-accent hover:text-fg bg-bg/80 backdrop-blur-sm border-border hover:border-accent cursor-pointer">
+                        快捷键帮助 (?)
+                    </button>
+                </div>
+
+
+                <div class="flex-1 overflow-auto p-4 md:p-8 pt-4 md:pt-16 scrollbar-thin" tabindex="0" ref="treeContainer">
+                    <div v-if="!treeData || (typeof treeData !== 'object' && treeData !== null)" class="h-full flex flex-col items-center justify-center text-muted">
+                        <svg class="w-16 h-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        <p>无数据，请粘贴 JSON</p>
+                    </div>
+
+                    <div v-else-if="viewMode === 'tree'" class="min-w-max select-none outline-none">
+                        <json-node 
+                            :data="treeData" 
+                            :is-root="true"
+                            :path="[]"
+                            :selected-path="selectedPath"
+                            :editing-state="editingState"
+                            :expanded-paths="expandedPaths"
+                            @select="selectNode"
+                            @update:value="handleValueUpdate"
+                            @update:key="handleKeyUpdate"
+                            @add-child="handleAddChild"
+                            @delete="deleteNode"
+                            @toggle="toggleExpand"
+                            @start-edit="startEdit"
+                            @stop-edit="stopEdit"
+                        />
+                    </div>
+                    <div v-else class="min-w-max flex justify-center">
+                        <mind-map-node :data="treeData" :is-root="true" />
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <!-- 手机端底部版权信息 -->
+        <footer class="md:hidden bg-bg-card border-t border-border px-4 py-2 text-center text-xs text-muted flex-shrink-0">
+            <p>© 黑龙江省瑜美科技发展有限公司</p>
+        </footer>
+        
+        <transition name="fade">
+            <div v-if="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-bg-card border border-accent/30 text-accent px-4 py-2 rounded-lg shadow-xl text-sm flex items-center gap-2 z-50">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                {{ toast }}
+            </div>
+        </transition>
+
+        <!-- 快捷键帮助弹窗 -->
+        <transition name="fade">
+            <div v-if="showHelp" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center" @click="showHelp = false">
+                <div class="bg-bg-card border border-border rounded-xl shadow-2xl p-6 max-w-md w-full mx-4" @click.stop>
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-bold text-fg">快捷键帮助</h3>
+                        <button @click="showHelp = false" class="text-muted hover:text-fg">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                    <div class="space-y-3 text-sm">
+                        <div class="grid grid-cols-2 gap-2">
+                            <span class="text-muted font-mono">↑ / ↓</span>
+                            <span class="text-fg">上下导航节点</span>
+                            <span class="text-muted font-mono">← / →</span>
+                            <span class="text-fg">展开/收缩节点</span>
+                            <span class="text-muted font-mono">Enter</span>
+                            <span class="text-fg">添加子节点/下方插入</span>
+                            <span class="text-muted font-mono">Shift+Enter</span>
+                            <span class="text-fg">在上方插入</span>
+                            <span class="text-muted font-mono">Tab</span>
+                            <span class="text-fg">在下方插入</span>
+                            <span class="text-muted font-mono">F2</span>
+                            <span class="text-fg">编辑键名/值</span>
+                            <span class="text-muted font-mono">[ / ]</span>
+                            <span class="text-fg">切换类型</span>
+                            <span class="text-muted font-mono">Ctrl+[ / Ctrl+]</span>
+                            <span class="text-fg">向上/向下移动</span>
+                            <span class="text-muted font-mono">Delete</span>
+                            <span class="text-fg">删除节点</span>
+                            <span class="text-muted font-mono">Ctrl+C</span>
+                            <span class="text-fg">复制节点</span>
+                            <span class="text-muted font-mono">Ctrl+Alt+C</span>
+                            <span class="text-fg">复制 XPath</span>
+                            <span class="text-muted font-mono">Ctrl+V</span>
+                            <span class="text-fg">粘贴节点</span>
+                            <span class="text-muted font-mono">Ctrl+Z</span>
+                            <span class="text-fg">撤销</span>
+                            <span class="text-muted font-mono">Ctrl+Y / Ctrl+Shift+Z</span>
+                            <span class="text-fg">重做</span>
+                            <span class="text-muted font-mono">Insert</span>
+                            <span class="text-fg">下方插入</span>
+                            <span class="text-muted font-mono">Home</span>
+                            <span class="text-fg">跳转到第一个</span>
+                            <span class="text-muted font-mono">End</span>
+                            <span class="text-fg">跳转到最后一个</span>
+                            <span class="text-muted font-mono">PageUp</span>
+                            <span class="text-fg">向上翻页</span>
+                            <span class="text-muted font-mono">PageDown</span>
+                            <span class="text-fg">向下翻页</span>
+                            <span class="text-muted font-mono">? / ？</span>
+                            <span class="text-fg">显示/隐藏帮助</span>
+                        </div>
+                        <div class="mt-4 pt-4 border-t border-border text-xs text-muted">
+                            <p>提示：输入 [] 自动转为数组，{} 转为对象，null 转为空值</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+    </div>
+
+    <script>
+        const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick, toRaw } = Vue;
+        
+        const TYPE_MAP = { 'string': '文本', 'number': '数字', 'boolean': '布尔', 'null': '空', 'object': '对象', 'array': '数组' };
+        const TYPE_KEYS = ['string', 'number', 'boolean', 'null', 'object', 'array'];
+        const TYPE_BG_COLORS = {
+            string: 'bg-yellow-500/20 border-yellow-600/30', number: 'bg-purple-500/20 border-purple-500/30',
+            boolean: 'bg-pink-500/20 border-pink-500/30', null: 'bg-slate-500/20 border-slate-500/30',
+            object: 'bg-cyan-500/20 border-cyan-500/30', array: 'bg-blue-500/20 border-blue-500/30',
+        };
+
+        const JsonNode = {
+            name: 'JsonNode',
+            props: ['data', 'path', 'isRoot', 'selectedPath', 'editingState', 'expandedPaths'],
+            emits: ['select', 'update:value', 'update:key', 'add-child', 'delete', 'toggle', 'start-edit', 'stop-edit'],
+            setup(props, { emit }) {
+                const editInput = ref(null);
+                
+                const getType = (v) => {
+                    if (v === null) return 'null';
+                    if (Array.isArray(v)) return 'array';
+                    return typeof v;
+                };
+                
+                const pathKey = computed(() => props.path.join('.') || 'root');
+                const isExpanded = computed(() => props.expandedPaths.has(pathKey.value));
+                
+                const isEditingKey = computed(() => props.editingState.type === 'key' && JSON.stringify(props.editingState.path) === JSON.stringify(props.path));
+                const isEditingValue = computed(() => props.editingState.type === 'value' && JSON.stringify(props.editingState.path) === JSON.stringify(props.path));
+                
+                const isSelected = computed(() => JSON.stringify(props.path) === JSON.stringify(props.selectedPath));
+                const isObject = computed(() => getType(props.data) === 'object' && props.data !== null);
+                const isArray = computed(() => Array.isArray(props.data));
+                const isIterable = computed(() => isObject.value || isArray.value);
+                
+                const entries = computed(() => {
+                    if (isArray.value) return props.data.map((v, i) => ({ key: i, val: v }));
+                    if (isObject.value) return Object.entries(props.data).map(([k, v]) => ({ key: k, val: v }));
+                    return [];
+                });
+
+                // 强制聚焦逻辑
+                watch([isEditingKey, isEditingValue], ([isKey, isVal]) => {
+                    if (isKey || isVal) {
+                        nextTick(() => {
+                            if (editInput.value) {
+                                editInput.value.focus();
+                                editInput.value.select();
+                            }
+                        });
+                    }
+                }, { flush: 'post' });
+
+                const toggle = () => { if(isIterable.value) emit('toggle', props.path); };
+                const onSelect = () => emit('select', props.path);
+                
+                const startEditKey = () => {
+                    if (props.isRoot) return;
+                    emit('start-edit', { path: props.path, type: 'key', initialVal: props.path[props.path.length - 1] });
+                };
+
+                const startEditValue = () => {
+                    // 对象/数组双击值不应编辑，而是展开？暂定为不编辑
+                    if (isIterable.value) return; 
+                    emit('start-edit', { path: props.path, type: 'value', initialVal: String(props.data ?? '') });
+                };
+
+                const finishEdit = (save = true) => {
+                    if(!editInput.value) return;
+                    const inputVal = editInput.value.value.trim();
+                    
+                    if (save) {
+                        if (isEditingKey.value) {
+                            emit('update:key', { path: props.path, oldKey: props.path[props.path.length - 1], newKey: inputVal });
+                        } else if (isEditingValue.value) {
+                            let newVal = inputVal;
+                            // 智能类型识别
+                            if (inputVal === '[]') {
+                                newVal = [];
+                            } else if (inputVal === '{}') {
+                                newVal = {};
+                            } else if (inputVal.toLowerCase() === 'null') {
+                                newVal = null;
+                            } else if (!isNaN(inputVal) && inputVal !== '') {
+                                newVal = Number(inputVal);
+                            } else if (inputVal.toLowerCase() === 'true') {
+                                newVal = true;
+                            } else if (inputVal.toLowerCase() === 'false') {
+                                newVal = false;
+                            }
+                            emit('update:value', { path: props.path, newValue: newVal });
+                        }
+                    }
+                    emit('stop-edit');
+                };
+
+                const changeType = (newType) => {
+                    // 根节点限制
+                    if (props.isRoot && !['object', 'array'].includes(newType)) return;
+
+                    let newVal = props.data;
+                    // 尝试智能转换
+                    if (newType === 'string') newVal = String(props.data ?? '');
+                    else if (newType === 'number') newVal = Number(props.data) || 0;
+                    else if (newType === 'boolean') newVal = Boolean(props.data);
+                    else if (newType === 'null') newVal = null;
+                    else if (newType === 'object') newVal = {};
+                    else if (newType === 'array') newVal = [];
+                    
+                    emit('update:value', { path: props.path, newValue: newVal });
+                };
+
+                // 输入框键盘事件
+                const handleInputKeydown = (e) => {
+                    // F2 需要冒泡到全局处理，用于键编辑后进入值编辑
+                    if (e.key === 'F2') {
+                        return; // 不阻止冒泡，让全局处理
+                    }
+                    
+                    e.stopPropagation(); // 阻止冒泡到全局键盘事件
+                    
+                    if (e.key === 'Enter') {
+                        e.preventDefault(); 
+                        finishEdit(true);
+                    } else if (e.key === 'Tab') {
+                        e.preventDefault();
+                        finishEdit(true);
+                        // Tab: 保存并在同级插入新元素
+                        nextTick(() => {
+                            emit('add-child', props.path.slice(0, -1), isArray.value, true);
+                        });
+                    } else if (e.key === 'Escape') {
+                        finishEdit(false); // 取消保存
+                    }
+                };
+
+                return { 
+                    isExpanded, getType, isSelected, isObject, isArray, isIterable, entries, TYPE_MAP, TYPE_BG_COLORS,
+                    toggle, onSelect, changeType, startEditKey, startEditValue, finishEdit, editInput,
+                    isEditingKey, isEditingValue, handleInputKeydown
+                };
+            },
+            template: `
+                <div class="font-mono text-sm relative group">
+                    <div :class="['flex items-center gap-2 py-1 px-2 rounded-md transition-colors duration-100', isSelected ? 'bg-accent/20 ring-1 ring-accent/40' : 'hover:bg-white/5']" @click="onSelect">
+                        <button v-if="isIterable" @click.stop="toggle" class="w-4 h-4 flex items-center justify-center rounded hover:bg-white/10">
+                            <svg :class="['w-3 h-3 transition-transform text-muted', isExpanded && 'rotate-90']" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </button>
+                        <div v-else class="w-4"></div>
+                        
+                        <select :value="getType(data)" @change="changeType($event.target.value)" @click.stop :class="['text-[10px] font-bold px-1.5 py-0.5 rounded border cursor-pointer outline-none bg-bg text-fg appearance-none', TYPE_BG_COLORS[getType(data)] || 'bg-muted/20 border-muted']" style="background-image: none;">
+                            <!-- 根节点只显示对象和数组 -->
+                            <template v-if="isRoot">
+                                <option value="object" class="bg-bg text-fg">对象</option>
+                                <option value="array" class="bg-bg text-fg">数组</option>
+                            </template>
+                            <template v-else>
+                                <option v-for="(label, key) in TYPE_MAP" :key="key" :value="key" class="bg-bg text-fg">{{ label }}</option>
+                            </template>
+                        </select>
+
+                        <template v-if="!isRoot">
+                            <input v-if="isEditingKey" ref="editInput" :value="editingState.initialVal" @keydown="handleInputKeydown" class="inline-edit-input w-auto" />
+                            <span v-else @dblclick.stop="startEditKey" class="text-key font-semibold cursor-text hover:underline">{{ path[path.length-1] }}</span>
+                            <span class="text-muted">:</span>
+                        </template>
+                        
+                        <template v-if="isIterable">
+                            <span class="text-muted text-xs">{{ isArray ? '[' : '{' }} {{ entries.length }} {{ isArray ? ']' : '}' }}</span>
+                        </template>
+                        <template v-else>
+                            <input v-if="isEditingValue" ref="editInput" :value="editingState.initialVal" @keydown="handleInputKeydown" class="inline-edit-input w-auto" />
+                            <span v-else @dblclick="startEditValue" :class="['cursor-text truncate max-w-xs']" :style="{ color: getType(data) === 'string' ? '#fcd34d' : (getType(data) === 'number' ? '#c4b5fd' : (getType(data) === 'boolean' ? '#fb7185' : '#94a3b8')) }">
+                                {{ getType(data) === 'string' ? '"' + data + '"' : String(data) }}
+                            </span>
+                        </template>
+
+                        <div class="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button v-if="isIterable" @click.stop="$emit('add-child', path, isArray)" class="p-1 hover:bg-accent/20 rounded text-accent" title="添加子项">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                            </button>
+                            <button v-if="!isRoot" @click.stop="$emit('delete', path)" class="p-1 hover:bg-red-500/20 rounded text-red-400" title="删除">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <transition name="slide">
+                        <div v-if="isIterable && isExpanded" class="ml-3 tree-line">
+                            <json-node v-for="(entry, i) in entries" :key="entry.key + '-' + i" :data="entry.val" :path="[...path, entry.key]" :selected-path="selectedPath" :editing-state="editingState" :expanded-paths="expandedPaths"
+                                @select="(p) => $emit('select', p)" @update:value="(e) => $emit('update:value', e)" @update:key="(e) => $emit('update:key', e)"
+                                @add-child="(p, isArr, fromTab) => $emit('add-child', p, isArr, fromTab)" @delete="(p) => $emit('delete', p)"
+                                @start-edit="(s) => $emit('start-edit', s)" @stop-edit="() => $emit('stop-edit')" @toggle="(p) => $emit('toggle', p)" />
+                        </div>
+                    </transition>
+                </div>
+            `
+        };
+
+        const MindMapNode = { 
+            name: 'MindMapNode', 
+            props: ['data', 'isRoot'], 
+            setup(props) {
+                const getType = (v) => Array.isArray(v) ? 'array' : (v === null ? 'null' : typeof v);
+                const isIterable = computed(() => typeof props.data === 'object' && props.data !== null);
+                const entries = computed(() => (Array.isArray(props.data) ? props.data.map((v, i) => ({ k: i, v })) : Object.entries(props.data).map(([k, v]) => ({ k, v }))) || []);
+                const typeStyles = { object: 'bg-cyan-900/50 border-cyan-500/50 text-cyan-200', array: 'bg-blue-900/50 border-blue-500/50 text-blue-200', string: 'bg-yellow-900/50 border-yellow-500/50 text-yellow-200', number: 'bg-purple-900/50 border-purple-500/50 text-purple-200', boolean: 'bg-pink-900/50 border-pink-500/50 text-pink-200', null: 'bg-slate-700/50 border-slate-500/50 text-slate-300' };
+                return { getType, isIterable, entries, typeStyles, TYPE_MAP };
+            },
+            template: `
+                <div class="flex flex-col items-center relative p-4">
+                    <div :class="['mind-node px-4 py-2 rounded-xl border-2 shadow-lg mb-4 min-w-[80px] text-center text-sm font-mono', typeStyles[getType(data)]]">
+                        <div v-if="isRoot" class="font-bold text-base mb-1">Root</div>
+                        <div v-if="isIterable" class="font-bold">{{ TYPE_MAP[getType(data)] || getType(data) }} <span class="text-xs opacity-70 ml-1">({{ entries.length }})</span></div>
+                        <div v-else class="truncate max-w-[150px]">{{ getType(data) === 'string' ? '"' + data + '"' : String(data) }}</div>
+                    </div>
+                    <div v-if="isIterable && entries.length" class="relative flex flex-col items-center">
+                        <div class="absolute -top-4 w-px h-4 bg-border"></div>
+                        <div class="flex items-start gap-6 pt-2 relative">
+                            <div v-if="entries.length > 1" class="absolute top-0 left-1/2 -translate-x-1/2 w-[calc(100%-60px)] h-px bg-border"></div>
+                            <div v-for="(entry, i) in entries" :key="i" class="flex flex-col items-center relative">
+                                <div class="w-px h-4 bg-border mb-2"></div>
+                                <div v-if="getType(data) === 'object'" class="text-xs text-accent font-bold mb-1 bg-bg px-1 rounded">{{ entry.k }}</div>
+                                <mind-map-node :data="entry.v" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `
+        };
+
+        createApp({
+            components: { JsonNode, MindMapNode },
+            setup() {
+                // 页签管理
+                const tabs = ref([]);
+                const activeTabIndex = ref(0);
+                
+                // 当前页签的数据（计算属性）
+                const currentTab = computed(() => tabs.value[activeTabIndex.value] || null);
+                
+                // 当前页签的数据引用
+                const jsonInput = ref('');
+                const treeData = ref(null);
+                const error = ref('');
+                const toast = ref('');
+                const selectedPath = ref([]);
+                const viewMode = ref('tree');
+                const genLang = ref('');
+                const generatedCode = ref('');
+                const treeContainer = ref(null);
+                
+                const editingState = reactive({ type: 'none', path: [], initialVal: '' });
+                const expandedPaths = reactive(new Set(['root'])); // 默认展开根节点
+                const showHelp = ref(false);
+                
+                // 手机端相关状态
+                const isInputCollapsed = ref(false);
+                const isDesktop = ref(window.innerWidth >= 768);
+                
+                // 监听窗口大小变化
+                const handleResize = () => {
+                    isDesktop.value = window.innerWidth >= 768;
+                    if (isDesktop.value) {
+                        isInputCollapsed.value = false;
+                    }
+                };
+                
+                // 切换 JSON 输入区收起/展开
+                const toggleInputCollapse = () => {
+                    isInputCollapsed.value = !isInputCollapsed.value;
+                };
+                
+                // 生成唯一ID
+                const generateTabId = () => 'tab_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                
+                // 创建新页签
+                const createTab = (name = null, content = null) => {
+                    const defaultContent = '{\n  "项目名称": "JSON可视化工具",\n  "版本": 1.0,\n  "功能": [\n    "树形结构",\n    "脑图视图",\n    "代码生成"\n  ],\n  "配置": {\n    "主题": "dark",\n    "自动保存": true\n  }\n}';
+                    const tabName = name || '页签 ' + (tabs.value.length + 1);
+                    return {
+                        id: generateTabId(),
+                        name: tabName,
+                        editName: tabName,
+                        isEditing: false,
+                        jsonInput: content || defaultContent,
+                        // 每个页签独立的状态
+                        treeData: null,
+                        selectedPath: [],
+                        expandedPaths: new Set(['root']),
+                        history: [],
+                        historyIndex: -1
+                    };
+                };
+                
+                // 添加页签
+                const addTab = () => {
+                    const newTab = createTab();
+                    tabs.value.push(newTab);
+                    activeTabIndex.value = tabs.value.length - 1;
+                    loadTabData();
+                    saveToStorage();
+                    showToast('新建页签');
+                };
+                
+                // 关闭页签
+                const closeTab = (index) => {
+                    if (tabs.value.length <= 1) {
+                        showToast('至少保留一个页签');
+                        return;
+                    }
+                    tabs.value.splice(index, 1);
+                    if (activeTabIndex.value >= index && activeTabIndex.value > 0) {
+                        activeTabIndex.value--;
+                    }
+                    loadTabData();
+                    saveToStorage();
+                };
+                
+                // 切换页签
+                const switchTab = (index) => {
+                    if (index === activeTabIndex.value) return;
+                    // 保存当前页签状态
+                    saveCurrentTabState();
+                    activeTabIndex.value = index;
+                    loadTabData();
+                };
+                
+                // 保存当前页签状态
+                const saveCurrentTabState = () => {
+                    const tab = currentTab.value;
+                    if (!tab) return;
+                    tab.jsonInput = jsonInput.value;
+                    tab.treeData = treeData.value;
+                    tab.selectedPath = selectedPath.value;
+                    tab.expandedPaths = new Set(expandedPaths);
+                    tab.history = JSON.parse(JSON.stringify(history.value));
+                    tab.historyIndex = historyIndex.value;
+                };
+                
+                // 加载页签数据
+                const loadTabData = () => {
+                    const tab = currentTab.value;
+                    if (!tab) return;
+                    jsonInput.value = tab.jsonInput;
+                    treeData.value = tab.treeData;
+                    selectedPath.value = tab.selectedPath || [];
+                    expandedPaths.clear();
+                    (tab.expandedPaths || new Set(['root'])).forEach(p => expandedPaths.add(p));
+                    history.value = tab.history ? JSON.parse(JSON.stringify(tab.history)) : [];
+                    historyIndex.value = tab.historyIndex || -1;
+                    parseInput();
+                };
+                
+                // 开始重命名页签
+                const startRenameTab = (index) => {
+                    const tab = tabs.value[index];
+                    tab.isEditing = true;
+                    tab.editName = tab.name;
+                    nextTick(() => {
+                        const input = document.querySelector('.tab-edit-input');
+                        if (input) input.focus();
+                    });
+                };
+                
+                // 完成重命名
+                const finishRenameTab = (index) => {
+                    const tab = tabs.value[index];
+                    if (tab.editName.trim()) {
+                        tab.name = tab.editName.trim();
+                    }
+                    tab.isEditing = false;
+                    saveToStorage();
+                };
+                
+                // 取消重命名
+                const cancelRenameTab = (index) => {
+                    const tab = tabs.value[index];
+                    tab.editName = tab.name;
+                    tab.isEditing = false;
+                };
+                
+                // 计算属性：是否可以生成代码（选中的是对象或数组类型）
+                const canGenerateCode = computed(() => {
+                    const { target } = getRefByPath(selectedPath.value);
+                    return target && typeof target === 'object';
+                });
+                
+                // 计算属性：是否可以生成建表/Java代码（只能是对象类型）
+                const canGenerateSchema = computed(() => {
+                    const { target } = getRefByPath(selectedPath.value);
+                    return target && typeof target === 'object' && !Array.isArray(target);
+                });
+                
+                // 将键名转换为蛇形命名
+                const toSnakeCase = (str) => {
+                    if (typeof str !== 'string') return String(str);
+                    return str.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
+                };
+                
+                // 将键名转换为驼峰命名
+                const toCamelCase = (str) => {
+                    if (typeof str !== 'string') return String(str);
+                    return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+                };
+                
+                // 将键名转换为大驼峰命名（类名）
+                const toPascalCase = (str) => {
+                    const camel = toCamelCase(str);
+                    return camel.charAt(0).toUpperCase() + camel.slice(1);
+                };
+                
+                // 获取选中节点的表名/类名（向上递归查找）
+                const getNodeName = (path) => {
+                    if (!path || path.length === 0) return 'root';
+                    
+                    // 从后向前查找第一个非数字的键名
+                    for (let i = path.length - 1; i >= 0; i--) {
+                        const key = path[i];
+                        // 如果不是数字索引，使用它作为名称
+                        if (typeof key === 'string') {
+                            return key;
+                        }
+                    }
+                    
+                    // 如果全是数字，返回默认名称
+                    return 'item';
+                };
+                
+                // 推断 MySQL 字段类型
+                const inferMySQLType = (value, key) => {
+                    if (value === null) return 'VARCHAR(255)';
+                    const type = typeof value;
+                    if (type === 'string') return 'VARCHAR(255)';
+                    if (type === 'number') {
+                        // 检查是否为整数
+                        if (Number.isInteger(value)) {
+                            return 'BIGINT';
+                        }
+                        return 'DECIMAL(10,2)';
+                    }
+                    if (type === 'boolean') return 'BIT(1)';
+                    // 对象和数组忽略
+                    return null;
+                };
+                
+                // 推断 Java 字段类型
+                const inferJavaType = (value) => {
+                    if (value === null) return 'String';
+                    const type = typeof value;
+                    if (type === 'string') return 'String';
+                    if (type === 'number') {
+                        if (Number.isInteger(value)) {
+                            return 'Long';
+                        }
+                        return 'BigDecimal';
+                    }
+                    if (type === 'boolean') return 'Boolean';
+                    // 对象和数组忽略
+                    return null;
+                };
+                
+                // 生成 MySQL 建表语句
+                const generateMySQL = () => {
+                    if (!canGenerateSchema.value) return;
+                    
+                    const { target } = getRefByPath(selectedPath.value);
+                    const tableName = toSnakeCase(getNodeName(selectedPath.value));
+                    
+                    const fields = [];
+                    const keys = Object.keys(target);
+                    let isFirst = true;
+                    
+                    for (const key of keys) {
+                        const value = target[key];
+                        // 忽略对象和数组
+                        if (value !== null && typeof value === 'object') continue;
+                        
+                        const columnName = toSnakeCase(key);
+                        const mysqlType = inferMySQLType(value, key);
+                        if (!mysqlType) continue;
+                        
+                        let fieldDef = '    `' + columnName + '` ' + mysqlType;
+                        
+                        // 第一个字段作为主键
+                        if (isFirst) {
+                            fieldDef += ' PRIMARY KEY';
+                            isFirst = false;
+                        }
+                        
+                        fieldDef += " COMMENT '" + key + "'";
+                        fields.push(fieldDef);
+                    }
+                    
+                    if (fields.length === 0) {
+                        showToast('没有可生成的字段');
+                        return;
+                    }
+                    
+                    const sql = 'CREATE TABLE `' + tableName + '` (\n' + fields.join(',\n') + '\n);';
+                    
+                    navigator.clipboard.writeText(sql).then(() => {
+                        showToast('MySQL 建表语句已复制');
+                    });
+                };
+                
+                // 格式化值为 SQL 值
+                const formatSqlValue = (value) => {
+                    if (value === null) return 'NULL';
+                    if (typeof value === 'string') return "'" + value.replace(/'/g, "''") + "'";
+                    if (typeof value === 'boolean') return value ? '1' : '0';
+                    return String(value);
+                };
+                
+                // 生成单条 INSERT 语句
+                const generateSingleInsert = (obj, tableName) => {
+                    const keys = Object.keys(obj);
+                    const columns = [];
+                    const values = [];
+                    
+                    for (const key of keys) {
+                        const value = obj[key];
+                        // 忽略对象和数组
+                        if (value !== null && typeof value === 'object') continue;
+                        
+                        columns.push('`' + toSnakeCase(key) + '`');
+                        values.push(formatSqlValue(value));
+                    }
+                    
+                    if (columns.length === 0) return null;
+                    
+                    return 'INSERT INTO `' + tableName + '` (' + columns.join(', ') + ') VALUES (' + values.join(', ') + ');';
+                };
+                
+                // 生成 MySQL INSERT 语句
+                const generateMySQLInsert = () => {
+                    if (!canGenerateCode.value) return;
+                    
+                    const { target } = getRefByPath(selectedPath.value);
+                    const tableName = toSnakeCase(getNodeName(selectedPath.value));
+                    
+                    let statements = [];
+                    
+                    if (Array.isArray(target)) {
+                        // 数组：为每个对象生成 INSERT
+                        for (let i = 0; i < target.length; i++) {
+                            const item = target[i];
+                            if (item && typeof item === 'object' && !Array.isArray(item)) {
+                                const sql = generateSingleInsert(item, tableName);
+                                if (sql) statements.push(sql);
+                            }
+                        }
+                    } else {
+                        // 对象：生成单条 INSERT
+                        const sql = generateSingleInsert(target, tableName);
+                        if (sql) statements.push(sql);
+                    }
+                    
+                    if (statements.length === 0) {
+                        showToast('没有可生成的数据');
+                        return;
+                    }
+                    
+                    const result = statements.join('\n');
+                    navigator.clipboard.writeText(result).then(() => {
+                        showToast('MySQL INSERT 语句已复制 (' + statements.length + ' 条)');
+                    });
+                };
+                
+                // 生成单条 UPDATE 语句
+                const generateSingleUpdate = (obj, tableName, isFirstFieldAsId = true) => {
+                    const keys = Object.keys(obj);
+                    if (keys.length === 0) return null;
+                    
+                    const setClauses = [];
+                    let idColumn = null;
+                    let idValue = null;
+                    
+                    for (let i = 0; i < keys.length; i++) {
+                        const key = keys[i];
+                        const value = obj[key];
+                        // 忽略对象和数组
+                        if (value !== null && typeof value === 'object') continue;
+                        
+                        const columnName = toSnakeCase(key);
+                        
+                        // 第一个字段作为 WHERE 条件
+                        if (isFirstFieldAsId && idColumn === null) {
+                            idColumn = columnName;
+                            idValue = formatSqlValue(value);
+                        } else {
+                            setClauses.push('`' + columnName + '` = ' + formatSqlValue(value));
+                        }
+                    }
+                    
+                    if (setClauses.length === 0 || idColumn === null) return null;
+                    
+                    return 'UPDATE `' + tableName + '` SET ' + setClauses.join(', ') + ' WHERE `' + idColumn + '` = ' + idValue + ';';
+                };
+                
+                // 生成 MySQL UPDATE 语句
+                const generateMySQLUpdate = () => {
+                    if (!canGenerateCode.value) return;
+                    
+                    const { target } = getRefByPath(selectedPath.value);
+                    const tableName = toSnakeCase(getNodeName(selectedPath.value));
+                    
+                    let statements = [];
+                    
+                    if (Array.isArray(target)) {
+                        // 数组：为每个对象生成 UPDATE
+                        for (let i = 0; i < target.length; i++) {
+                            const item = target[i];
+                            if (item && typeof item === 'object' && !Array.isArray(item)) {
+                                const sql = generateSingleUpdate(item, tableName);
+                                if (sql) statements.push(sql);
+                            }
+                        }
+                    } else {
+                        // 对象：生成单条 UPDATE
+                        const sql = generateSingleUpdate(target, tableName);
+                        if (sql) statements.push(sql);
+                    }
+                    
+                    if (statements.length === 0) {
+                        showToast('没有可生成的数据');
+                        return;
+                    }
+                    
+                    const result = statements.join('\n');
+                    navigator.clipboard.writeText(result).then(() => {
+                        showToast('MySQL UPDATE 语句已复制 (' + statements.length + ' 条)');
+                    });
+                };
+                
+                // 生成 Java 对象代码
+                const generateJava = () => {
+                    if (!canGenerateSchema.value) return;
+                    
+                    const { target } = getRefByPath(selectedPath.value);
+                    const className = toPascalCase(getNodeName(selectedPath.value));
+                    
+                    const fields = [];
+                    const keys = Object.keys(target);
+                    
+                    for (const key of keys) {
+                        const value = target[key];
+                        // 忽略对象和数组
+                        if (value !== null && typeof value === 'object') continue;
+                        
+                        const javaType = inferJavaType(value);
+                        if (!javaType) continue;
+                        
+                        const fieldName = toCamelCase(key);
+                        fields.push(`    /** ${key} */\n    private ${javaType} ${fieldName};`);
+                    }
+                    
+                    if (fields.length === 0) {
+                        showToast('没有可生成的字段');
+                        return;
+                    }
+                    
+                    const javaCode = 'import lombok.Data;\n\n@Data\npublic class ' + className + ' {\n' + fields.join('\n\n') + '\n}';
+                    
+                    navigator.clipboard.writeText(javaCode).then(() => {
+                        showToast('Java 对象代码已复制');
+                    });
+                };
+                
+                // 历史记录管理
+                const history = ref([]);
+                const historyIndex = ref(-1);
+                const MAX_HISTORY = 50; // 最大历史记录数
+                
+                // LocalStorage 键名
+                const STORAGE_KEY = 'json_editor_data';
+                
+                // 保存状态到历史记录
+                const saveToHistory = () => {
+                    const state = JSON.stringify(treeData.value);
+                    // 如果当前状态与最后一个历史记录相同，不保存
+                    if (historyIndex.value >= 0 && history.value[historyIndex.value] === state) {
+                        return;
+                    }
+                    // 删除当前索引之后的历史记录（重做记录）
+                    history.value = history.value.slice(0, historyIndex.value + 1);
+                    // 添加新状态
+                    history.value.push(state);
+                    // 限制历史记录数量
+                    if (history.value.length > MAX_HISTORY) {
+                        history.value.shift();
+                    } else {
+                        historyIndex.value++;
+                    }
+                };
+                
+                // 撤销
+                const undo = () => {
+                    if (historyIndex.value > 0) {
+                        historyIndex.value--;
+                        treeData.value = JSON.parse(history.value[historyIndex.value]);
+                        syncTreeToInput();
+                        showToast('已撤销');
+                    }
+                };
+                
+                // 重做
+                const redo = () => {
+                    if (historyIndex.value < history.value.length - 1) {
+                        historyIndex.value++;
+                        treeData.value = JSON.parse(history.value[historyIndex.value]);
+                        syncTreeToInput();
+                        showToast('已重做');
+                    }
+                };
+                
+                // 计算属性：是否可以撤销/重做
+                const canUndo = computed(() => historyIndex.value > 0);
+                const canRedo = computed(() => historyIndex.value < history.value.length - 1);
+
+                const parseInput = () => { 
+                    try { 
+                        if(!jsonInput.value.trim()) { treeData.value = {}; return; } 
+                        treeData.value = JSON.parse(jsonInput.value); 
+                        error.value = ''; 
+                        // 解析后默认展开根节点
+                        expandedPaths.add('root');
+                        // 初始化历史记录
+                        saveToHistory();
+                    } catch (e) { error.value = 'JSON 格式错误: ' + e.message; } 
+                };
+                const formatJson = () => { try { jsonInput.value = JSON.stringify(JSON.parse(jsonInput.value), null, 2); error.value = ''; } catch(e) { error.value = '格式化失败: ' + e.message; } };
+                const resetTree = () => { 
+                    jsonInput.value = '{}'; 
+                    treeData.value = {}; 
+                    selectedPath.value = []; 
+                    expandedPaths.clear(); 
+                    expandedPaths.add('root'); 
+                    saveToHistory(); 
+                    saveToStorage();
+                    showToast('已重置并清空本地保存');
+                };
+                const showToast = (msg) => { toast.value = msg; setTimeout(() => toast.value = '', 2000); };
+
+                // 获取节点引用
+                const getRefByPath = (path) => {
+                    if (!path || path.length === 0) return { target: treeData.value, parent: null, key: null };
+                    let current = treeData.value;
+                    for (let i = 0; i < path.length - 1; i++) current = current[path[i]];
+                    return { target: current[path[path.length - 1]], parent: current, key: path[path.length - 1] };
+                };
+
+                const selectNode = (path) => { 
+                    selectedPath.value = path; 
+                    // 选中后滚动到可视区域
+                    nextTick(() => {
+                        scrollToSelectedNode();
+                    });
+                };
+                
+                // 滚动到选中节点
+                const scrollToSelectedNode = () => {
+                    if (!treeContainer.value) return;
+                    
+                    // 查找选中的元素
+                    const selectedEl = treeContainer.value.querySelector('.ring-accent\\/40');
+                    if (!selectedEl) return;
+                    
+                    const containerRect = treeContainer.value.getBoundingClientRect();
+                    const elRect = selectedEl.getBoundingClientRect();
+                    
+                    // 检查是否在可视区域外
+                    const padding = 16; // 留一些边距
+                    
+                    // 垂直方向
+                    if (elRect.top < containerRect.top + padding) {
+                        // 元素在可视区域上方
+                        treeContainer.value.scrollTop -= (containerRect.top + padding - elRect.top);
+                    } else if (elRect.bottom > containerRect.bottom - padding) {
+                        // 元素在可视区域下方
+                        treeContainer.value.scrollTop += (elRect.bottom - containerRect.bottom + padding);
+                    }
+                    
+                    // 水平方向
+                    if (elRect.left < containerRect.left + padding) {
+                        // 元素在可视区域左侧
+                        treeContainer.value.scrollLeft -= (containerRect.left + padding - elRect.left);
+                    } else if (elRect.right > containerRect.right - padding) {
+                        // 元素在可视区域右侧
+                        treeContainer.value.scrollLeft += (elRect.right - containerRect.right + padding);
+                    }
+                };
+                
+                const startEdit = ({ path, type, initialVal }) => {
+                    editingState.path = path;
+                    editingState.type = type;
+                    editingState.initialVal = initialVal;
+                };
+
+                const stopEdit = () => {
+                    editingState.type = 'none';
+                    editingState.initialVal = '';
+                };
+
+                // 展开/收缩控制
+                const toggleExpand = (path) => {
+                    const key = path.length === 0 ? 'root' : path.join('.');
+                    if(expandedPaths.has(key)) expandedPaths.delete(key);
+                    else expandedPaths.add(key);
+                };
+
+                const handleValueUpdate = ({ path, newValue }) => {
+                    const { parent, key } = getRefByPath(path);
+                    if (parent) parent[key] = newValue;
+                    else treeData.value = newValue;
+                    syncTreeToInput();
+                };
+
+                const handleKeyUpdate = ({ path, oldKey, newKey }) => {
+                    if (!newKey || newKey === oldKey) {
+                        stopEdit();
+                        return;
+                    }
+                    const { parent } = getRefByPath(path);
+                    const keys = Object.keys(parent);
+                    const oldIndex = keys.indexOf(oldKey);
+                    if (oldIndex === -1) return;
+                    
+                    // 检查新键名是否已存在
+                    if (parent.hasOwnProperty(newKey) && newKey !== oldKey) {
+                        showToast('键名已存在，请使用其他名称');
+                        // 不停止编辑，让用户继续修改
+                        return;
+                    }
+                    
+                    const newParent = {};
+                    keys.forEach(k => {
+                        if (k === oldKey) {
+                            newParent[newKey] = parent[k];
+                        } else newParent[k] = parent[k];
+                    });
+                    Object.keys(parent).forEach(k => delete parent[k]);
+                    Object.assign(parent, newParent);
+                    
+                    const newPath = [...path.slice(0, -1), newKey];
+                    selectedPath.value = newPath;
+                    syncTreeToInput();
+                    showToast('键名已修改');
+                    stopEdit();
+                };
+
+                // 添加子节点逻辑
+                const handleAddChild = (path, isArr, isFromTab = false) => {
+                    // 如果当前正在编辑，先关闭编辑状态
+                    if(editingState.type !== 'none') stopEdit();
+
+                    let target = path.length === 0 ? treeData.value : getRefByPath(path).target;
+                    if (!target) return;
+
+                    // 如果是叶子节点，转到同级插入逻辑
+                    if (typeof target !== 'object') {
+                         handleInsert();
+                         return;
+                    }
+
+                    // 确保父节点展开
+                    const pathKey = path.length === 0 ? 'root' : path.join('.');
+                    expandedPaths.add(pathKey);
+
+                    let newPath = [];
+                    if (Array.isArray(target)) {
+                        target.push(null);
+                        newPath = [...path, target.length - 1];
+                        selectedPath.value = newPath;
+                        syncTreeToInput();
+                        // 数组新增：自动进入值编辑模式
+                        nextTick(() => {
+                            startEdit({ path: newPath, type: 'value', initialVal: '' });
+                        });
+                    } else if (typeof target === 'object') {
+                        const newKey = generateUniqueKey(target);
+                        target[newKey] = null;
+                        newPath = [...path, newKey];
+                        selectedPath.value = newPath;
+                        syncTreeToInput();
+                        // 对象新增：自动进入键编辑模式
+                        nextTick(() => {
+                            startEdit({ path: newPath, type: 'key', initialVal: newKey });
+                        });
+                    }
+                };
+
+                const deleteNode = (path) => {
+                    if (!path || path.length === 0) return;
+                    
+                    // 获取扁平列表来确定删除前的位置
+                    const flatList = flattenTree(treeData.value);
+                    const currentIdx = flatList.findIndex(p => JSON.stringify(p) === JSON.stringify(path));
+                    
+                    const { parent, key } = getRefByPath(path);
+                    if (Array.isArray(parent)) parent.splice(key, 1);
+                    else delete parent[key];
+                    
+                    // 删除后，光标移动到前一个元素（如果存在），否则保持当前位置
+                    if (currentIdx > 0) {
+                        selectedPath.value = flatList[currentIdx - 1];
+                    } else {
+                        selectedPath.value = [];
+                    }
+                    
+                    syncTreeToInput();
+                    showToast('已删除');
+                };
+
+                const handleNavigation = (direction) => {
+                    const flatList = flattenTree(treeData.value);
+                    const currentIdx = flatList.findIndex(p => JSON.stringify(p) === JSON.stringify(selectedPath.value));
+                    if (direction === 'up' && currentIdx > 0) {
+                        selectNode(flatList[currentIdx - 1]);
+                    } else if (direction === 'down' && currentIdx < flatList.length - 1) {
+                        selectNode(flatList[currentIdx + 1]);
+                    }
+                };
+
+                const flattenTree = (data, path = [], list = []) => {
+                    list.push(path);
+                    const pathKey = path.length === 0 ? 'root' : path.join('.');
+                    // 只展开已展开的节点
+                    if (data && typeof data === 'object' && expandedPaths.has(pathKey)) {
+                        const keys = Array.isArray(data) ? data.map((_, i) => i) : Object.keys(data);
+                        keys.forEach(k => flattenTree(data[k], [...path, k], list));
+                    }
+                    return list;
+                };
+
+                // 生成唯一的属性名
+                const generateUniqueKey = (parent, prefix = '新属性') => {
+                    if (!parent.hasOwnProperty(prefix)) return prefix;
+                    let i = 1;
+                    while (parent.hasOwnProperty(prefix + i)) {
+                        i++;
+                    }
+                    return prefix + i;
+                };
+
+                // 同级插入逻辑（在当前元素之后插入）
+                const handleInsert = () => {
+                    if (selectedPath.value.length === 0) return;
+                    
+                    // 如果当前正在编辑，先关闭编辑状态
+                    if(editingState.type !== 'none') stopEdit();
+                    
+                    const parentPath = selectedPath.value.slice(0, -1);
+                    const { target: parent } = getRefByPath(parentPath);
+                    const currentKey = selectedPath.value.slice(-1)[0];
+                    
+                    if (Array.isArray(parent)) {
+                        const currentIdx = parseInt(currentKey);
+                        parent.splice(currentIdx + 1, 0, null);
+                        const newPath = [...parentPath, currentIdx + 1];
+                        selectedPath.value = newPath;
+                        syncTreeToInput();
+                        // 数组：自动编辑值
+                        nextTick(() => {
+                            startEdit({ path: newPath, type: 'value', initialVal: '' });
+                        });
+                    } else if (typeof parent === 'object') {
+                        const keys = Object.keys(parent);
+                        const currentIdx = keys.indexOf(String(currentKey));
+                        const newKey = generateUniqueKey(parent);
+                        const newParent = {};
+                        keys.forEach((k, i) => {
+                            newParent[k] = parent[k];
+                            if (i === currentIdx) newParent[newKey] = null;
+                        });
+                        Object.keys(parent).forEach(k => delete parent[k]);
+                        Object.assign(parent, newParent);
+                        
+                        const newPath = [...parentPath, newKey];
+                        selectedPath.value = newPath;
+                        syncTreeToInput();
+                        // 对象：自动编辑键
+                        nextTick(() => {
+                            startEdit({ path: newPath, type: 'key', initialVal: newKey });
+                        });
+                    }
+                };
+
+                // 在上方插入逻辑
+                const handleInsertBefore = () => {
+                    if (selectedPath.value.length === 0) return;
+                    
+                    // 如果当前正在编辑，先关闭编辑状态
+                    if(editingState.type !== 'none') stopEdit();
+                    
+                    const parentPath = selectedPath.value.slice(0, -1);
+                    const { target: parent } = getRefByPath(parentPath);
+                    const currentKey = selectedPath.value.slice(-1)[0];
+                    
+                    if (Array.isArray(parent)) {
+                        const currentIdx = parseInt(currentKey);
+                        parent.splice(currentIdx, 0, null);
+                        const newPath = [...parentPath, currentIdx];
+                        selectedPath.value = newPath;
+                        syncTreeToInput();
+                        // 数组：自动编辑值
+                        nextTick(() => {
+                            startEdit({ path: newPath, type: 'value', initialVal: '' });
+                        });
+                    } else if (typeof parent === 'object') {
+                        const keys = Object.keys(parent);
+                        const currentIdx = keys.indexOf(String(currentKey));
+                        const newKey = generateUniqueKey(parent);
+                        const newParent = {};
+                        keys.forEach((k, i) => {
+                            if (i === currentIdx) newParent[newKey] = null;
+                            newParent[k] = parent[k];
+                        });
+                        Object.keys(parent).forEach(k => delete parent[k]);
+                        Object.assign(parent, newParent);
+                        
+                        const newPath = [...parentPath, newKey];
+                        selectedPath.value = newPath;
+                        syncTreeToInput();
+                        // 对象：自动编辑键
+                        nextTick(() => {
+                            startEdit({ path: newPath, type: 'key', initialVal: newKey });
+                        });
+                    }
+                };
+
+                // 全局键盘事件
+                const handleKeydown = (e) => {
+                    // 1. 编辑状态逻辑
+                    if (editingState.type !== 'none') {
+                        // 组件内部处理了 Enter/Tab/Esc，这里只处理特殊情况
+                        // 比如 Escape 如果组件没处理，这里兜底
+                        if (e.key === 'Escape') stopEdit();
+                        // F2 在编辑状态下有特殊处理，不直接返回
+                        if (e.key !== 'F2') {
+                            return; // 正在编辑时，不响应其他快捷键
+                        }
+                    }
+
+                    // 2. 非编辑状态逻辑
+                    const { target } = getRefByPath(selectedPath.value);
+                    const isContainer = target && typeof target === 'object';
+
+                    if (e.key === 'ArrowUp') { e.preventDefault(); handleNavigation('up'); }
+                    else if (e.key === 'ArrowDown') { e.preventDefault(); handleNavigation('down'); }
+                    else if (e.key === 'ArrowLeft') { 
+                        e.preventDefault(); 
+                        if(isContainer) {
+                            const key = selectedPath.value.length === 0 ? 'root' : selectedPath.value.join('.');
+                            expandedPaths.delete(key);
+                        }
+                    }
+                    else if (e.key === 'ArrowRight') { 
+                        e.preventDefault(); 
+                        if(isContainer) {
+                            const key = selectedPath.value.length === 0 ? 'root' : selectedPath.value.join('.');
+                            expandedPaths.add(key);
+                        }
+                    }
+                    else if (e.key === '[') { 
+                        if (e.ctrlKey) {
+                            e.preventDefault();
+                            handleMoveUp();
+                        } else {
+                            e.preventDefault(); 
+                            cycleType(-1); 
+                        }
+                    }
+                    else if (e.key === ']') { 
+                        if (e.ctrlKey) {
+                            e.preventDefault();
+                            handleMoveDown();
+                        } else {
+                            e.preventDefault(); 
+                            cycleType(1); 
+                        }
+                    }
+                    else if (e.key === 'F2') {
+                        e.preventDefault();
+                        // F2: 智能编辑
+                        // 如果正在编辑键名，则确认键名并进入值编辑
+                        if (editingState.type === 'key') {
+                            finishEditKeyAndStartValueEdit();
+                            return;
+                        }
+                        
+                        // 如果正在编辑值，则直接返回（由输入框自己处理）
+                        if (editingState.type === 'value') {
+                            return;
+                        }
+                        
+                        // 未在编辑状态时的逻辑
+                        if (selectedPath.value.length === 0) return;
+                        
+                        const parent = getRefByPath(selectedPath.value.slice(0, -1)).target;
+                        
+                        // 数组元素：直接进入值编辑
+                        if (Array.isArray(parent)) {
+                            if (!isContainer) {
+                                startEdit({ path: selectedPath.value, type: 'value', initialVal: String(target ?? '') });
+                            }
+                        } else {
+                            // 对象属性：先进入键编辑
+                            startEdit({ path: selectedPath.value, type: 'key', initialVal: selectedPath.value.slice(-1)[0] });
+                        }
+                    }
+                    else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            // Shift+Enter: 在上面插入
+                            handleInsertBefore();
+                        } else {
+                            // Enter: 在下面插入或添加子节点
+                            if (isContainer) {
+                                handleAddChild(selectedPath.value, Array.isArray(target));
+                            } else {
+                                handleInsert();
+                            }
+                        }
+                    }
+                    else if (e.key === 'Tab') {
+                        e.preventDefault();
+                        handleInsert();
+                    }
+                    else if (e.key === 'Delete') { deleteNode(selectedPath.value); }
+                    else if (e.key === 'Insert') {
+                        e.preventDefault();
+                        handleInsert();
+                    }
+                    else if (e.key === 'Home') {
+                        e.preventDefault();
+                        const flatList = flattenTree(treeData.value);
+                        if (flatList.length > 0) selectNode(flatList[0]);
+                    }
+                    else if (e.key === 'End') {
+                        e.preventDefault();
+                        const flatList = flattenTree(treeData.value);
+                        if (flatList.length > 0) selectNode(flatList[flatList.length - 1]);
+                    }
+                    else if (e.key === 'PageUp') {
+                        e.preventDefault();
+                        const flatList = flattenTree(treeData.value);
+                        const currentIdx = flatList.findIndex(p => JSON.stringify(p) === JSON.stringify(selectedPath.value));
+                        // 向上跳转10个节点或到顶部
+                        const newIdx = Math.max(0, currentIdx - 10);
+                        if (newIdx !== currentIdx) selectNode(flatList[newIdx]);
+                    }
+                    else if (e.key === 'PageDown') {
+                        e.preventDefault();
+                        const flatList = flattenTree(treeData.value);
+                        const currentIdx = flatList.findIndex(p => JSON.stringify(p) === JSON.stringify(selectedPath.value));
+                        // 向下跳转10个节点或到底部
+                        const newIdx = Math.min(flatList.length - 1, currentIdx + 10);
+                        if (newIdx !== currentIdx) selectNode(flatList[newIdx]);
+                    }
+                    else if (e.key === '?' || e.key === '？') {
+                        e.preventDefault();
+                        showHelp.value = !showHelp.value;
+                    }
+                    else if ((e.ctrlKey || e.metaKey) && e.key === 'c' && !e.altKey) {
+                         if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                            e.preventDefault(); copyNode();
+                        }
+                    }
+                    else if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === 'c') {
+                        e.preventDefault(); copyXPath();
+                    }
+                    else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+                         if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                            e.preventDefault(); pasteNode();
+                        }
+                    }
+                    else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                        e.preventDefault();
+                        undo();
+                    }
+                    else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+                        e.preventDefault();
+                        redo();
+                    }
+                };
+
+                // 全局点击：关闭编辑
+                const handleGlobalClick = (e) => {
+                    if (editingState.type !== 'none') {
+                        if (e.target.tagName !== 'INPUT') {
+                            // 模拟保存行为
+                            // 这里有点技巧：直接获取当前DOM中正在显示的input值
+                            // 由于没有引用，我们这里简单处理：点击外部直接结束编辑，保留原值（取消编辑）
+                            // 如果需要保存，通常blur事件会先触发，但我们在组件里阻止了blur的默认行为
+                            // 这里选择直接停止编辑（取消），符合用户直觉（点别的地方=取消）
+                            stopEdit(); 
+                        }
+                    }
+                };
+
+                const cycleType = (dir) => {
+                    const isRoot = selectedPath.value.length === 0;
+                    const { target, parent, key } = getRefByPath(selectedPath.value);
+                    const currentType = (target === null ? 'null' : (Array.isArray(target) ? 'array' : typeof target));
+                    
+                    // 根节点只能在 object 和 array 之间切换
+                    const availableTypes = isRoot ? ['object', 'array'] : TYPE_KEYS;
+                    let idx = availableTypes.indexOf(currentType);
+                    if (idx === -1) idx = 0;
+                    idx = (idx + dir + availableTypes.length) % availableTypes.length;
+                    const newType = availableTypes[idx];
+                    
+                    let newVal = target;
+                    if (newType === 'string') newVal = '';
+                    else if (newType === 'number') newVal = 0;
+                    else if (newType === 'boolean') newVal = true;
+                    else if (newType === 'null') newVal = null;
+                    else if (newType === 'object') newVal = {};
+                    else if (newType === 'array') newVal = [];
+                    
+                    if (parent) parent[key] = newVal;
+                    else treeData.value = newVal;
+                    syncTreeToInput();
+                };
+
+                // 向上移动节点
+                const handleMoveUp = () => {
+                    if (selectedPath.value.length === 0) return;
+                    
+                    const parentPath = selectedPath.value.slice(0, -1);
+                    const { target: parent } = getRefByPath(parentPath);
+                    const currentKey = selectedPath.value.slice(-1)[0];
+                    
+                    if (Array.isArray(parent)) {
+                        const currentIdx = parseInt(currentKey);
+                        if (currentIdx <= 0) return; // 已经在最上面
+                        
+                        // 交换位置
+                        const temp = parent[currentIdx];
+                        parent[currentIdx] = parent[currentIdx - 1];
+                        parent[currentIdx - 1] = temp;
+                        
+                        selectedPath.value = [...parentPath, currentIdx - 1];
+                        syncTreeToInput();
+                        showToast('已上移');
+                    } else if (typeof parent === 'object') {
+                        const keys = Object.keys(parent);
+                        const currentIdx = keys.indexOf(String(currentKey));
+                        if (currentIdx <= 0) return; // 已经在最上面
+                        
+                        // 重新排序
+                        const newParent = {};
+                        keys.forEach((k, i) => {
+                            if (i === currentIdx - 1) {
+                                newParent[currentKey] = parent[currentKey];
+                                newParent[k] = parent[k];
+                            } else if (i !== currentIdx) {
+                                newParent[k] = parent[k];
+                            }
+                        });
+                        
+                        Object.keys(parent).forEach(k => delete parent[k]);
+                        Object.assign(parent, newParent);
+                        
+                        selectedPath.value = [...parentPath, currentKey];
+                        syncTreeToInput();
+                        showToast('已上移');
+                    }
+                };
+
+                // 向下移动节点
+                const handleMoveDown = () => {
+                    if (selectedPath.value.length === 0) return;
+                    
+                    const parentPath = selectedPath.value.slice(0, -1);
+                    const { target: parent } = getRefByPath(parentPath);
+                    const currentKey = selectedPath.value.slice(-1)[0];
+                    
+                    if (Array.isArray(parent)) {
+                        const currentIdx = parseInt(currentKey);
+                        if (currentIdx >= parent.length - 1) return; // 已经在最下面
+                        
+                        // 交换位置
+                        const temp = parent[currentIdx];
+                        parent[currentIdx] = parent[currentIdx + 1];
+                        parent[currentIdx + 1] = temp;
+                        
+                        selectedPath.value = [...parentPath, currentIdx + 1];
+                        syncTreeToInput();
+                        showToast('已下移');
+                    } else if (typeof parent === 'object') {
+                        const keys = Object.keys(parent);
+                        const currentIdx = keys.indexOf(String(currentKey));
+                        if (currentIdx >= keys.length - 1) return; // 已经在最下面
+                        
+                        // 重新排序
+                        const newParent = {};
+                        keys.forEach((k, i) => {
+                            if (i === currentIdx) {
+                                newParent[keys[i + 1]] = parent[keys[i + 1]];
+                                newParent[k] = parent[k];
+                            } else if (i !== currentIdx + 1) {
+                                newParent[k] = parent[k];
+                            }
+                        });
+                        
+                        Object.keys(parent).forEach(k => delete parent[k]);
+                        Object.assign(parent, newParent);
+                        
+                        selectedPath.value = [...parentPath, currentKey];
+                        syncTreeToInput();
+                        showToast('已下移');
+                    }
+                };
+
+                const syncTreeToInput = () => { 
+                    try { 
+                        jsonInput.value = JSON.stringify(treeData.value, null, 2); 
+                        saveToHistory();
+                    } catch(e) { console.error(e); } 
+                };
+                
+                const copyNode = () => {
+                    const { target } = getRefByPath(selectedPath.value);
+                    navigator.clipboard.writeText(JSON.stringify(target, null, 2)).then(() => showToast('已复制到剪贴板'));
+                };
+
+                // 生成 XPath
+                const generateXPath = (path) => {
+                    if (!path || path.length === 0) return '$';
+                    
+                    let xpath = '$';
+                    for (let i = 0; i < path.length; i++) {
+                        const key = path[i];
+                        if (typeof key === 'number' || !isNaN(parseInt(key))) {
+                            // 数组索引
+                            xpath += `[${key}]`;
+                        } else {
+                            // 对象属性名
+                            // 如果属性名包含特殊字符，需要加引号
+                            if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key)) {
+                                xpath += `.${key}`;
+                            } else {
+                                xpath += `['${key}']`;
+                            }
+                        }
+                    }
+                    return xpath;
+                };
+
+                // 复制 XPath
+                const copyXPath = () => {
+                    if (selectedPath.value.length === 0) {
+                        showToast('请先选择一个节点');
+                        return;
+                    }
+                    const xpath = generateXPath(selectedPath.value);
+                    navigator.clipboard.writeText(xpath).then(() => showToast(`XPath 已复制: ${xpath}`));
+                };
+
+                // 解析粘贴的JSON内容
+                const parsePastedJson = (text) => {
+                    try {
+                        const trimmed = text.trim();
+                        if (!trimmed) return null;
+                        
+                        // 尝试解析为JSON
+                        return JSON.parse(trimmed);
+                    } catch (e) {
+                        // 如果不是有效JSON，返回原始文本作为字符串
+                        return text.trim();
+                    }
+                };
+
+                // 粘贴节点
+                const pasteNode = async () => {
+                    try {
+                        const text = await navigator.clipboard.readText();
+                        const parsedValue = parsePastedJson(text);
+                        
+                        if (parsedValue === null) {
+                            showToast('剪贴板为空');
+                            return;
+                        }
+
+                        // 如果没有选中任何节点，粘贴到根
+                        if (selectedPath.value.length === 0) {
+                            if (typeof parsedValue === 'object' && parsedValue !== null) {
+                                treeData.value = parsedValue;
+                                syncTreeToInput();
+                                showToast('已粘贴到根节点');
+                            } else {
+                                showToast('根节点必须是对象或数组');
+                            }
+                            return;
+                        }
+
+                        // 始终在选中节点的同级后面插入
+                        const parentPath = selectedPath.value.slice(0, -1);
+                        const { target: parentNode } = getRefByPath(parentPath);
+                        const currentKey = selectedPath.value.slice(-1)[0];
+                        
+                        // 如果没有父节点（选中的是根），无法粘贴
+                        if (!parentNode) {
+                            showToast('无法在根节点同级粘贴');
+                            return;
+                        }
+                        
+                        if (Array.isArray(parentNode)) {
+                            const currentIdx = parseInt(currentKey);
+                            parentNode.splice(currentIdx + 1, 0, parsedValue);
+                            const newPath = [...parentPath, currentIdx + 1];
+                            selectedPath.value = newPath;
+                            syncTreeToInput();
+                            showToast('已粘贴');
+                        } else if (typeof parentNode === 'object') {
+                            const keys = Object.keys(parentNode);
+                            const currentIdx = keys.indexOf(String(currentKey));
+                            const newKey = generateUniqueKey(parentNode);
+                            const newParent = {};
+                            keys.forEach((k, i) => {
+                                newParent[k] = parentNode[k];
+                                if (i === currentIdx) newParent[newKey] = parsedValue;
+                            });
+                            Object.keys(parentNode).forEach(k => delete parentNode[k]);
+                            Object.assign(parentNode, newParent);
+                            
+                            const newPath = [...parentPath, newKey];
+                            selectedPath.value = newPath;
+                            syncTreeToInput();
+                            showToast('已粘贴');
+                        }
+                    } catch (e) {
+                        showToast('粘贴失败: ' + e.message);
+                    }
+                };
+
+                const focusTreeArea = () => { if(treeContainer.value) treeContainer.value.focus(); };
+
+                // 完成键编辑并进入值编辑
+                const finishEditKeyAndStartValueEdit = () => {
+                    if (editingState.type !== 'key') return;
+                    
+                    const path = editingState.path;
+                    const oldKey = path[path.length - 1];
+                    const newKey = document.querySelector('.inline-edit-input')?.value?.trim() || oldKey;
+                    
+                    if (newKey && newKey !== oldKey) {
+                        const { parent } = getRefByPath(path);
+                        if (parent.hasOwnProperty(newKey)) {
+                            showToast('键名已存在，请使用其他名称');
+                            return;
+                        }
+                        
+                        const keys = Object.keys(parent);
+                        const newParent = {};
+                        keys.forEach(k => {
+                            if (k === oldKey) {
+                                newParent[newKey] = parent[k];
+                            } else newParent[k] = parent[k];
+                        });
+                        Object.keys(parent).forEach(k => delete parent[k]);
+                        Object.assign(parent, newParent);
+                        
+                        const newPath = [...path.slice(0, -1), newKey];
+                        selectedPath.value = newPath;
+                        syncTreeToInput();
+                        
+                        // 进入值编辑
+                        const value = parent[newKey];
+                        if (value === null || typeof value !== 'object') {
+                            nextTick(() => {
+                                startEdit({ path: newPath, type: 'value', initialVal: value === null ? '' : String(value) });
+                            });
+                        }
+                    } else {
+                        stopEdit();
+                        // 键名没变，直接进入值编辑
+                        const { target } = getRefByPath(path);
+                        if (target === null || typeof target !== 'object') {
+                            nextTick(() => {
+                                startEdit({ path: path, type: 'value', initialVal: target === null ? '' : String(target) });
+                            });
+                        }
+                    }
+                };
+
+                // 从 localStorage 加载数据（多页签格式）
+                const loadFromStorage = () => {
+                    try {
+                        const saved = localStorage.getItem(STORAGE_KEY);
+                        if (saved) {
+                            const parsed = JSON.parse(saved);
+                            // 新版格式：tabs 数组
+                            if (parsed.tabs && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
+                                tabs.value = parsed.tabs.map(tab => ({
+                                    ...tab,
+                                    // 恢复 Set 对象
+                                    expandedPaths: new Set(tab.expandedPaths || ['root'])
+                                }));
+                                activeTabIndex.value = Math.min(parsed.activeTabIndex || 0, tabs.value.length - 1);
+                                loadTabData();
+                                showToast('已恢复 ' + tabs.value.length + ' 个页签');
+                                return true;
+                            }
+                            // 旧版格式：单个 jsonInput，迁移到新版
+                            if (parsed.jsonInput) {
+                                const newTab = createTab('页签 1', parsed.jsonInput);
+                                tabs.value = [newTab];
+                                activeTabIndex.value = 0;
+                                loadTabData();
+                                saveToStorage();
+                                showToast('已迁移旧数据到新格式');
+                                return true;
+                            }
+                        }
+                    } catch (e) {
+                        console.error('加载本地数据失败:', e);
+                    }
+                    return false;
+                };
+                
+                // 保存到 localStorage（多页签格式）
+                const saveToStorage = () => {
+                    try {
+                        // 先保存当前页签状态
+                        saveCurrentTabState();
+                        
+                        // 序列化所有页签
+                        const data = {
+                            tabs: tabs.value.map(tab => ({
+                                id: tab.id,
+                                name: tab.name,
+                                jsonInput: tab.jsonInput,
+                                expandedPaths: Array.from(tab.expandedPaths || new Set(['root'])),
+                                history: tab.history,
+                                historyIndex: tab.historyIndex
+                            })),
+                            activeTabIndex: activeTabIndex.value,
+                            timestamp: Date.now()
+                        };
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                    } catch (e) {
+                        console.error('保存到本地失败:', e);
+                    }
+                };
+                
+                // 监听数据变化，自动保存
+                watch(jsonInput, () => {
+                    if (currentTab.value) {
+                        currentTab.value.jsonInput = jsonInput.value;
+                    }
+                    saveToStorage();
+                }, { debounce: 500 });
+                
+                // 监听 treeData 变化，也保存（确保编辑操作后保存）
+                watch(treeData, () => {
+                    saveToStorage();
+                }, { deep: true, debounce: 500 });
+
+                onMounted(() => {
+                    // 先尝试从 localStorage 加载
+                    if (!loadFromStorage()) {
+                        // 没有保存的数据，创建默认页签
+                        const defaultTab = createTab('页签 1');
+                        tabs.value = [defaultTab];
+                        activeTabIndex.value = 0;
+                        loadTabData();
+                    }
+                    window.addEventListener('keydown', handleKeydown);
+                    window.addEventListener('resize', handleResize);
+                });
+                onUnmounted(() => {
+                    window.removeEventListener('keydown', handleKeydown);
+                    window.removeEventListener('resize', handleResize);
+                });
+
+                return {
+                    // 页签相关
+                    tabs, activeTabIndex, currentTab,
+                    addTab, closeTab, switchTab, startRenameTab, finishRenameTab, cancelRenameTab,
+                    // 手机端相关
+                    isInputCollapsed, isDesktop, toggleInputCollapse,
+                    // 数据
+                    jsonInput, treeData, error, toast, selectedPath, viewMode, treeContainer, editingState, expandedPaths, showHelp,
+                    canUndo, canRedo, undo, redo, canGenerateCode, canGenerateSchema,
+                    parseInput, formatJson, resetTree, selectNode, handleValueUpdate, handleKeyUpdate, handleAddChild, deleteNode, copyNode, pasteNode,
+                    startEdit, stopEdit, handleNavigation, handleInsert, handleInsertBefore, handleMoveUp, handleMoveDown, generateUniqueKey, finishEditKeyAndStartValueEdit, scrollToSelectedNode, focusTreeArea, handleGlobalClick, toggleExpand,
+                    saveToStorage, loadFromStorage, copyXPath, generateXPath, generateMySQL, generateJava, generateMySQLInsert, generateMySQLUpdate, getNodeName
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
